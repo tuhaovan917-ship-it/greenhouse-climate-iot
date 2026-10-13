@@ -1,0 +1,22 @@
+
+{
+  "name": "BH1750 Light Intensity Sensor",
+  "author": "Greenhouse IoT Team",
+  "pins": [
+    "VCC",
+    "GND",
+    "SCL",
+    "SDA",
+    "ADDR"
+  ],
+  "controls": [
+    {
+      "id": "lux",
+      "label": "Light Intensity (lux)",
+      "type": "range",
+      "min": 0,
+      "max": 10000,
+      "step": 10
+    }
+  ]
+}

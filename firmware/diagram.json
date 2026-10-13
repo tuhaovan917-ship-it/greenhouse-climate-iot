@@ -14,7 +14,14 @@
     {
       "type": "chip-sht31",
       "id": "sht31",
-      "top": -40,
+      "top": -80,
+      "left": 240,
+      "attrs": {}
+    },
+    {
+      "type": "chip-bh1750",
+      "id": "bh1750",
+      "top": 120,
       "left": 240,
       "attrs": {}
     }
@@ -22,10 +29,17 @@
   "connections": [
     ["esp32:TX0", "$serialMonitor:RX", "", []],
     ["esp32:RX0", "$serialMonitor:TX", "", []],
+
     ["sht31:VCC", "esp32:3V3", "red", []],
     ["sht31:GND", "esp32:GND.1", "black", []],
     ["sht31:SDA", "esp32:D21", "green", []],
-    ["sht31:SCL", "esp32:D22", "blue", []]
+    ["sht31:SCL", "esp32:D22", "blue", []],
+
+    ["bh1750:VCC", "esp32:3V3", "red", []],
+    ["bh1750:GND", "esp32:GND.1", "black", []],
+    ["bh1750:SDA", "esp32:D21", "green", []],
+    ["bh1750:SCL", "esp32:D22", "blue", []],
+    ["bh1750:ADDR", "esp32:GND.1", "black", []]
   ],
   "serialMonitor": {
     "display": "always"

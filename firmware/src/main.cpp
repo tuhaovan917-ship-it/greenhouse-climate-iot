@@ -5,6 +5,7 @@
 #define SDA_PIN 21
 #define SCL_PIN 22
 #define SHT31_ADDR 0x44
+#define BH1750_ADDR 0x23
 
 unsigned long previousMillis = 0;
 const unsigned long interval = 2000;
@@ -67,29 +68,100 @@ bool readSHT31(float &temperature, float &humidity) {
     return true;
 }
 
+
+void scanI2C() {
+    Serial.println("Scanning I2C devices...");
+
+    int count = 0;
+
+    for (uint8_t address = 1; address < 127; address++) {
+        Wire.beginTransmission(address);
+        uint8_t error = Wire.endTransmission();
+
+        if (error == 0) {
+            Serial.printf("I2C device found at 0x%02X\n", address);
+            count++;
+        }
+    }
+
+    Serial.printf("Total I2C devices: %d\n", count);
+    Serial.println("--------------------");
+}
+
+
+bool initBH1750() {
+    Wire.beginTransmission(BH1750_ADDR);
+    Wire.write(0x10); // Continuous H-Resolution Mode
+
+    if (Wire.endTransmission() != 0) {
+        Serial.println("BH1750 initialization failed!");
+        return false;
+    }
+
+    Serial.println("BH1750 initialized successfully!");
+    return true;
+}
+
+bool readBH1750(float &lux) {
+    uint8_t received = Wire.requestFrom(
+        (uint8_t)BH1750_ADDR,
+        (uint8_t)2
+    );
+
+    if (received != 2) {
+        Serial.println("BH1750 read failed!");
+        return false;
+    }
+
+    uint16_t rawLight =
+        ((uint16_t)Wire.read() << 8) | Wire.read();
+
+    lux = rawLight / 1.2f;
+
+    return true;
+}
+
 void setup() {
     Serial.begin(115200);
     Wire.begin(SDA_PIN, SCL_PIN);
-
+    initBH1750();
+    delay(500);
+    scanI2C();
     Serial.println("Greenhouse IoT System");
     Serial.println("SHT31 Sensor Test");
 }
 
+
 void loop() {
     unsigned long currentMillis = millis();
 
+    // Doc cac cam bien moi 2 giay
     if (currentMillis - previousMillis >= interval) {
         previousMillis = currentMillis;
 
+        // 1. Doc SHT31
         float temperature;
         float humidity;
+
+        Serial.println("===== GREENHOUSE SENSOR DATA =====");
 
         if (readSHT31(temperature, humidity)) {
             Serial.printf("Temperature: %.2f C\n", temperature);
             Serial.printf("Humidity: %.2f %%\n", humidity);
-            Serial.println("--------------------");
         } else {
             Serial.println("Failed to read SHT31!");
         }
+
+        // 2. Doc BH1750
+        float lightLux;
+
+        if (readBH1750(lightLux)) {
+            Serial.printf("Light: %.2f lux\n", lightLux);
+        } else {
+            Serial.println("Failed to read BH1750!");
+        }
+
+        Serial.println("==================================");
+        Serial.println();
     }
 }
