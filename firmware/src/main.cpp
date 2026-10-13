@@ -6,6 +6,7 @@
 #define SCL_PIN 22
 #define SHT31_ADDR 0x44
 #define BH1750_ADDR 0x23
+#define WATER_SWITCH_PIN 32
 
 unsigned long previousMillis = 0;
 const unsigned long interval = 2000;
@@ -124,6 +125,7 @@ bool readBH1750(float &lux) {
 void setup() {
     Serial.begin(115200);
     Wire.begin(SDA_PIN, SCL_PIN);
+    pinMode(WATER_SWITCH_PIN, INPUT_PULLDOWN);
     initBH1750();
     delay(500);
     scanI2C();
@@ -159,6 +161,15 @@ void loop() {
             Serial.printf("Light: %.2f lux\n", lightLux);
         } else {
             Serial.println("Failed to read BH1750!");
+        }
+        
+        // 3. Doc trang thai muc nuoc
+        bool waterOk = digitalRead(WATER_SWITCH_PIN) == HIGH;
+
+        if (waterOk) {
+            Serial.println("Water Level: WATER_OK");
+        } else {
+            Serial.println("Water Level: WATER_LOW");
         }
 
         Serial.println("==================================");

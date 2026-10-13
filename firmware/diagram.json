@@ -24,6 +24,16 @@
       "top": 120,
       "left": 240,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "waterSwitch",
+      "top": 270,
+      "left": 240,
+      "attrs": {
+        "value": "1",
+        "bounce": "0"
+      }
     }
   ],
   "connections": [
@@ -39,7 +49,11 @@
     ["bh1750:GND", "esp32:GND.1", "black", []],
     ["bh1750:SDA", "esp32:D21", "green", []],
     ["bh1750:SCL", "esp32:D22", "blue", []],
-    ["bh1750:ADDR", "esp32:GND.1", "black", []]
+    ["bh1750:ADDR", "esp32:GND.1", "black", []],
+
+    ["waterSwitch:2", "esp32:D32", "green", []],
+    ["waterSwitch:1", "esp32:GND.1", "black", []],
+    ["waterSwitch:3", "esp32:3V3", "red", []]
   ],
   "serialMonitor": {
     "display": "always"
