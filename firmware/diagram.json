@@ -1,3 +1,4 @@
+
 {
   "version": 1,
   "author": "Greenhouse IoT Team",
@@ -9,11 +10,22 @@
       "top": 0,
       "left": 0,
       "attrs": {}
+    },
+    {
+      "type": "chip-sht31",
+      "id": "sht31",
+      "top": -40,
+      "left": 240,
+      "attrs": {}
     }
   ],
   "connections": [
-    [ "esp32:TX0", "$serialMonitor:RX", "", [] ],
-    [ "esp32:RX0", "$serialMonitor:TX", "", [] ]
+    ["esp32:TX0", "$serialMonitor:RX", "", []],
+    ["esp32:RX0", "$serialMonitor:TX", "", []],
+    ["sht31:VCC", "esp32:3V3", "red", []],
+    ["sht31:GND", "esp32:GND.1", "black", []],
+    ["sht31:SDA", "esp32:D21", "green", []],
+    ["sht31:SCL", "esp32:D22", "blue", []]
   ],
   "serialMonitor": {
     "display": "always"

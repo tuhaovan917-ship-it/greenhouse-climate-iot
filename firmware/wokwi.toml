@@ -2,3 +2,7 @@
 version = 1
 firmware = ".pio/build/esp32dev/firmware.bin"
 elf = ".pio/build/esp32dev/firmware.elf"
+
+[[chip]]
+name = "sht31"
+binary = "chips/sht31/sht31.chip.wasm"
