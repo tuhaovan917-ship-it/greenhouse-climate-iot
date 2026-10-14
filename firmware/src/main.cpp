@@ -8,12 +8,16 @@
 #define BH1750_ADDR 0x23
 #define WATER_SWITCH_PIN 32
 #define FAN_PIN 18
+#define PUMP_PIN 19
 
 unsigned long previousMillis = 0;
 const unsigned long interval = 2000;
 bool fanOn = false;
 const float FAN_TEMP_ON = 30.0f;
 const float FAN_TEMP_OFF = 28.0f;
+bool pumpOn = false;
+const float PUMP_HUM_ON = 55.0f;
+const float PUMP_HUM_OFF = 65.0f;
 
 // Tinh CRC-8 cua 2 byte du lieu
 uint8_t calculateCRC(const uint8_t *data) {
@@ -132,6 +136,8 @@ void setup() {
     pinMode(WATER_SWITCH_PIN, INPUT_PULLDOWN);
     pinMode(FAN_PIN, OUTPUT);
     digitalWrite(FAN_PIN, LOW);
+    pinMode(PUMP_PIN, OUTPUT);
+    digitalWrite(PUMP_PIN, LOW);
     initBH1750();
     delay(500);
     scanI2C();
@@ -141,6 +147,16 @@ void setup() {
 
 
 void loop() {
+    // FAILSAFE: Kiem tra muc nuoc lien tuc
+    if (digitalRead(WATER_SWITCH_PIN) == LOW && pumpOn) {
+        pumpOn = false;
+        digitalWrite(PUMP_PIN, LOW);
+
+        Serial.println(
+            "FAILSAFE: WATER_LOW - Pump stopped immediately!"
+        );
+    }
+    
     unsigned long currentMillis = millis();
 
     // Doc cac cam bien moi 2 giay
@@ -153,7 +169,9 @@ void loop() {
 
         Serial.println("===== GREENHOUSE SENSOR DATA =====");
         
-        if (readSHT31(temperature, humidity)) {
+        bool sht31Ok = readSHT31(temperature, humidity);
+
+        if (sht31Ok) {
             Serial.printf("Temperature: %.2f C\n", temperature);
             Serial.printf("Humidity: %.2f %%\n", humidity);
 
@@ -198,6 +216,34 @@ void loop() {
             "Ventilation Fan: %s\n",
             fanOn ? "ON" : "OFF"
         );
+
+        // 5. AUTO: Dieu khien bom theo do am
+        // Uu tien dieu kien an toan
+
+        if (!waterOk || !sht31Ok) {
+            pumpOn = false;
+        }
+        else if (humidity <= PUMP_HUM_ON) {
+            pumpOn = true;
+        }
+        else if (humidity >= PUMP_HUM_OFF) {
+            pumpOn = false;
+        }
+
+        digitalWrite(PUMP_PIN, pumpOn ? HIGH : LOW);
+
+        Serial.printf(
+            "Misting Pump: %s\n",
+            pumpOn ? "ON" : "OFF"
+        );
+
+        if (!waterOk) {
+            Serial.println("WARNING: Water level low - Pump disabled!");
+        }
+
+        if (!sht31Ok) {
+            Serial.println("WARNING: SHT31 error - Pump disabled!");
+        }
 
         Serial.println("==================================");
         Serial.println();

@@ -48,6 +48,20 @@
       "top": 20,
       "left": 430,
       "attrs": {}
+    },
+    {
+      "type": "chip-pump12v",
+      "id": "pump12v",
+      "top": 160,
+      "left": 520,
+      "attrs": {}
+    },
+    {
+      "type": "chip-mosfet-n",
+      "id": "pumpMosfet",
+      "top": 170,
+      "left": 420,
+      "attrs": {}
     }
   ],
   "connections": [
@@ -71,7 +85,11 @@
     
     ["esp32:D18", "fanMosfet:GATE", "orange", []],
     ["fanMosfet:DRAIN", "fan12v:VMINUS", "blue", []],
-    ["fanMosfet:SOURCE", "esp32:GND.1", "black", []]
+    ["fanMosfet:SOURCE", "esp32:GND.1", "black", []],
+    
+    ["esp32:D19", "pumpMosfet:GATE", "orange", []],
+    ["pumpMosfet:DRAIN", "pump12v:VMINUS", "blue", []],
+    ["pumpMosfet:SOURCE", "esp32:GND.1", "black", []]
   ],
   "serialMonitor": {
     "display": "always"

@@ -19,3 +19,7 @@ binary = "chips/fan12v/fan12v.chip.wasm"
 [[chip]]
 name = "mosfet-n"
 binary = "chips/mosfet-n/mosfet-n.chip.wasm"
+
+[[chip]]
+name = "pump12v"
+binary = "chips/pump12v/pump12v.chip.wasm"
