@@ -11,3 +11,11 @@ binary = "chips/sht31/sht31.chip.wasm"
 [[chip]]
 name = "bh1750"
 binary = "chips/bh1750/bh1750.chip.wasm"
+
+[[chip]]
+name = "fan12v"
+binary = "chips/fan12v/fan12v.chip.wasm"
+
+[[chip]]
+name = "mosfet-n"
+binary = "chips/mosfet-n/mosfet-n.chip.wasm"

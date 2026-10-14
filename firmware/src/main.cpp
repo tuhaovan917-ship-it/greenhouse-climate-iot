@@ -7,9 +7,11 @@
 #define SHT31_ADDR 0x44
 #define BH1750_ADDR 0x23
 #define WATER_SWITCH_PIN 32
+#define FAN_PIN 18
 
 unsigned long previousMillis = 0;
 const unsigned long interval = 2000;
+bool fanOn = false;
 
 // Tinh CRC-8 cua 2 byte du lieu
 uint8_t calculateCRC(const uint8_t *data) {
@@ -126,6 +128,8 @@ void setup() {
     Serial.begin(115200);
     Wire.begin(SDA_PIN, SCL_PIN);
     pinMode(WATER_SWITCH_PIN, INPUT_PULLDOWN);
+    pinMode(FAN_PIN, OUTPUT);
+    digitalWrite(FAN_PIN, LOW);
     initBH1750();
     delay(500);
     scanI2C();
@@ -171,6 +175,16 @@ void loop() {
         } else {
             Serial.println("Water Level: WATER_LOW");
         }
+        
+        // 4. Kiem tra dieu khien quat
+        fanOn = !fanOn;
+
+        digitalWrite(FAN_PIN, fanOn ? HIGH : LOW);
+
+        Serial.printf(
+            "Ventilation Fan: %s\n",
+            fanOn ? "ON" : "OFF"
+        );
 
         Serial.println("==================================");
         Serial.println();

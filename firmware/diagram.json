@@ -34,6 +34,20 @@
         "value": "1",
         "bounce": "0"
       }
+    },    
+    {
+      "type": "chip-fan12v",
+      "id": "fan12v",
+      "top": -120,
+      "left": 520,
+      "attrs": {}
+    },    
+    {
+      "type": "chip-mosfet-n",
+      "id": "fanMosfet",
+      "top": 20,
+      "left": 430,
+      "attrs": {}
     }
   ],
   "connections": [
@@ -53,7 +67,11 @@
 
     ["waterSwitch:2", "esp32:D32", "green", []],
     ["waterSwitch:1", "esp32:GND.1", "black", []],
-    ["waterSwitch:3", "esp32:3V3", "red", []]
+    ["waterSwitch:3", "esp32:3V3", "red", []],
+    
+    ["esp32:D18", "fanMosfet:GATE", "orange", []],
+    ["fanMosfet:DRAIN", "fan12v:VMINUS", "blue", []],
+    ["fanMosfet:SOURCE", "esp32:GND.1", "black", []]
   ],
   "serialMonitor": {
     "display": "always"
