@@ -12,6 +12,8 @@
 unsigned long previousMillis = 0;
 const unsigned long interval = 2000;
 bool fanOn = false;
+const float FAN_TEMP_ON = 30.0f;
+const float FAN_TEMP_OFF = 28.0f;
 
 // Tinh CRC-8 cua 2 byte du lieu
 uint8_t calculateCRC(const uint8_t *data) {
@@ -150,12 +152,27 @@ void loop() {
         float humidity;
 
         Serial.println("===== GREENHOUSE SENSOR DATA =====");
-
+        
         if (readSHT31(temperature, humidity)) {
             Serial.printf("Temperature: %.2f C\n", temperature);
             Serial.printf("Humidity: %.2f %%\n", humidity);
+
+            // AUTO: Dieu khien quat theo nhiet do
+            if (temperature >= FAN_TEMP_ON) {
+                fanOn = true;
+            } 
+            else if (temperature <= FAN_TEMP_OFF) {
+                fanOn = false;
+            }
+
+            digitalWrite(FAN_PIN, fanOn ? HIGH : LOW);
+
         } else {
             Serial.println("Failed to read SHT31!");
+
+            // Tam tat quat khi loi cam bien trong bai kiem thu
+            fanOn = false;
+            digitalWrite(FAN_PIN, LOW);
         }
 
         // 2. Doc BH1750
@@ -177,10 +194,6 @@ void loop() {
         }
         
         // 4. Kiem tra dieu khien quat
-        fanOn = !fanOn;
-
-        digitalWrite(FAN_PIN, fanOn ? HIGH : LOW);
-
         Serial.printf(
             "Ventilation Fan: %s\n",
             fanOn ? "ON" : "OFF"
