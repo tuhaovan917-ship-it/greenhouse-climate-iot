@@ -26,6 +26,20 @@ bool growLightOn = false;
 const float GROWLIGHT_LUX_ON = 300.0f;
 const float GROWLIGHT_LUX_OFF = 700.0f;
 
+// Che do dieu khien he thong
+enum ControlMode {
+    MODE_AUTO,
+    MODE_MANUAL
+};
+
+// Mac dinh khoi dong o che do AUTO
+ControlMode currentMode = MODE_AUTO;
+
+// Trang thai thiet bi trong che do MANUAL
+bool manualFanOn = false;
+bool manualPumpOn = false;
+bool manualGrowLightOn = false;
+
 // Tinh CRC-8 cua 2 byte du lieu
 uint8_t calculateCRC(const uint8_t *data) {
     uint8_t crc = 0xFF;
@@ -137,6 +151,52 @@ bool readBH1750(float &lux) {
     return true;
 }
 
+// Xu ly lenh chuyen che do AUTO / MANUAL
+void handleSerialMode() {
+    static String command = "";
+
+    while (Serial.available() > 0) {
+        char c = Serial.read();
+
+        if (c == '\n' || c == '\r') {
+            command.trim();
+            command.toUpperCase();
+
+            if (command == "AUTO") {
+                currentMode = MODE_AUTO;
+                Serial.println("Control Mode: AUTO");
+            }
+            else if (command == "MANUAL") {
+                currentMode = MODE_MANUAL;
+
+                // Tat thiet bi khi chuyen sang MANUAL
+                fanOn = false;
+                pumpOn = false;
+                growLightOn = false;
+
+                manualFanOn = false;
+                manualPumpOn = false;
+                manualGrowLightOn = false;
+
+                digitalWrite(FAN_PIN, LOW);
+                digitalWrite(PUMP_PIN, LOW);
+                digitalWrite(GROWLIGHT_PIN, LOW);
+
+                Serial.println("Control Mode: MANUAL");
+                Serial.println("All devices: OFF");
+            }
+            else if (command.length() > 0) {
+                Serial.println("Unknown command!");
+            }
+
+            command = "";
+        }
+        else if (command.length() < 32) {
+            command += c;
+        }
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     Wire.begin(SDA_PIN, SCL_PIN);
@@ -152,10 +212,14 @@ void setup() {
     scanI2C();
     Serial.println("Greenhouse IoT System");
     Serial.println("SHT31 Sensor Test");
+    Serial.println("Control Mode: AUTO");
 }
 
 
 void loop() {
+    // Nhan lenh AUTO / MANUAL
+    handleSerialMode();
+
     // FAILSAFE: Kiem tra muc nuoc lien tuc
     if (digitalRead(WATER_SWITCH_PIN) == LOW && pumpOn) {
         pumpOn = false;
@@ -185,11 +249,13 @@ void loop() {
             Serial.printf("Humidity: %.2f %%\n", humidity);
 
             // AUTO: Dieu khien quat theo nhiet do
-            if (temperature >= FAN_TEMP_ON) {
-                fanOn = true;
-            } 
-            else if (temperature <= FAN_TEMP_OFF) {
-                fanOn = false;
+            if (currentMode == MODE_AUTO) {
+                if (temperature >= FAN_TEMP_ON) {
+                    fanOn = true;
+                }
+                else if (temperature <= FAN_TEMP_OFF) {
+                    fanOn = false;
+                }
             }
 
             digitalWrite(FAN_PIN, fanOn ? HIGH : LOW);
@@ -229,7 +295,11 @@ void loop() {
 
         // 5. AUTO: Dieu khien bom theo do am
         // Uu tien dieu kien an toan
-        if (!waterOk || !sht31Ok) {
+        if (currentMode == MODE_MANUAL) {
+            // Tam thoi tat bom trong MANUAL
+            pumpOn = false;
+        }
+        else if (!waterOk || !sht31Ok) {
             pumpOn = false;
         }
         else if (humidity <= PUMP_HUM_ON) {
@@ -255,20 +325,21 @@ void loop() {
         }        
         
         // 6. AUTO: Dieu khien Grow Light theo BH1750
-        if (!bh1750Ok) {
-            // Loi cam bien: tat den
+        if (currentMode == MODE_MANUAL) {
+            // Tam thoi tat den trong MANUAL
+            growLightOn = false;
+        }
+        else if (!bh1750Ok) {
             growLightOn = false;
         }
         else if (lightLux <= GROWLIGHT_LUX_ON) {
-            // Anh sang thap: bat den
             growLightOn = true;
         }
         else if (lightLux >= GROWLIGHT_LUX_OFF) {
-            // Anh sang du cao: tat den
             growLightOn = false;
         }
-        // Trong vung tre: giu nguyen trang thai
 
+        // Trong vung tre: giu nguyen trang thai
         digitalWrite(
             GROWLIGHT_PIN,
             growLightOn ? HIGH : LOW
