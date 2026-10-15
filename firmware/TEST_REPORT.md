@@ -78,3 +78,13 @@ All listed manual control tests passed in Wokwi simulation.
 
 Note: These results are based on simulation testing,
 not physical hardware validation.
+
+### Test 6: AUTO Control After MANUAL Mode
+- Switch from MANUAL to AUTO: PASS
+- Temperature = 33 C: Fan ON - PASS
+- Humidity = 50%, WATER_OK: Pump ON - PASS
+- Light = 200 lux: Grow Light ON - PASS
+- All three actuators respond correctly: PASS
+
+### Conclusion
+AUTO control resumes correctly after switching from MANUAL mode in Wokwi simulation.
