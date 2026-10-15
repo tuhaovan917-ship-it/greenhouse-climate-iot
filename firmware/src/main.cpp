@@ -152,6 +152,7 @@ bool readBH1750(float &lux) {
 }
 
 // Xu ly lenh chuyen che do AUTO / MANUAL
+
 void handleSerialMode() {
     static String command = "";
 
@@ -162,21 +163,38 @@ void handleSerialMode() {
             command.trim();
             command.toUpperCase();
 
+            if (command.length() == 0) {
+                command = "";
+                continue;
+            }
+
             if (command == "AUTO") {
                 currentMode = MODE_AUTO;
+
+                manualFanOn = false;
+                manualPumpOn = false;
+                manualGrowLightOn = false;
+
+                fanOn = false;
+                pumpOn = false;
+                growLightOn = false;
+
+                digitalWrite(FAN_PIN, LOW);
+                digitalWrite(PUMP_PIN, LOW);
+                digitalWrite(GROWLIGHT_PIN, LOW);
+
                 Serial.println("Control Mode: AUTO");
             }
             else if (command == "MANUAL") {
                 currentMode = MODE_MANUAL;
 
-                // Tat thiet bi khi chuyen sang MANUAL
-                fanOn = false;
-                pumpOn = false;
-                growLightOn = false;
-
                 manualFanOn = false;
                 manualPumpOn = false;
                 manualGrowLightOn = false;
+
+                fanOn = false;
+                pumpOn = false;
+                growLightOn = false;
 
                 digitalWrite(FAN_PIN, LOW);
                 digitalWrite(PUMP_PIN, LOW);
@@ -185,7 +203,73 @@ void handleSerialMode() {
                 Serial.println("Control Mode: MANUAL");
                 Serial.println("All devices: OFF");
             }
-            else if (command.length() > 0) {
+            else if (currentMode != MODE_MANUAL) {
+                Serial.println(
+                    "Please switch to MANUAL mode first!"
+                );
+            }
+            else if (command == "FAN ON" ||
+                     command == "FAN OFF") {
+                manualFanOn = (command == "FAN ON");
+                fanOn = manualFanOn;
+
+                digitalWrite(
+                    FAN_PIN,
+                    fanOn ? HIGH : LOW
+                );
+
+                Serial.printf(
+                    "Manual Fan: %s\n",
+                    fanOn ? "ON" : "OFF"
+                );
+            }
+            else if (command == "PUMP ON" ||
+                     command == "PUMP OFF") {
+                bool requestedOn = (command == "PUMP ON");
+                bool waterOk =
+                    digitalRead(WATER_SWITCH_PIN) == HIGH;
+
+                if (requestedOn && !waterOk) {
+                    manualPumpOn = false;
+                    pumpOn = false;
+
+                    Serial.println(
+                        "WARNING: WATER_LOW - Pump blocked!"
+                    );
+                }
+                else {
+                    manualPumpOn = requestedOn;
+                    pumpOn = manualPumpOn;
+                }
+
+                digitalWrite(
+                    PUMP_PIN,
+                    pumpOn ? HIGH : LOW
+                );
+
+                Serial.printf(
+                    "Manual Pump: %s\n",
+                    pumpOn ? "ON" : "OFF"
+                );
+            }
+            else if (command == "LIGHT ON" ||
+                     command == "LIGHT OFF") {
+                manualGrowLightOn =
+                    (command == "LIGHT ON");
+
+                growLightOn = manualGrowLightOn;
+
+                digitalWrite(
+                    GROWLIGHT_PIN,
+                    growLightOn ? HIGH : LOW
+                );
+
+                Serial.printf(
+                    "Manual Grow Light: %s\n",
+                    growLightOn ? "ON" : "OFF"
+                );
+            }
+            else {
                 Serial.println("Unknown command!");
             }
 
@@ -196,6 +280,7 @@ void handleSerialMode() {
         }
     }
 }
+
 
 void setup() {
     Serial.begin(115200);
@@ -221,15 +306,18 @@ void loop() {
     handleSerialMode();
 
     // FAILSAFE: Kiem tra muc nuoc lien tuc
-    if (digitalRead(WATER_SWITCH_PIN) == LOW && pumpOn) {
+    if (digitalRead(WATER_SWITCH_PIN) == LOW &&
+        (pumpOn || manualPumpOn)) {
+
         pumpOn = false;
+        manualPumpOn = false;
         digitalWrite(PUMP_PIN, LOW);
 
         Serial.println(
             "FAILSAFE: WATER_LOW - Pump stopped immediately!"
         );
     }
-    
+
     unsigned long currentMillis = millis();
 
     // Doc cac cam bien moi 2 giay
@@ -241,32 +329,33 @@ void loop() {
         float humidity;
 
         Serial.println("===== GREENHOUSE SENSOR DATA =====");
-        
+
         bool sht31Ok = readSHT31(temperature, humidity);
 
         if (sht31Ok) {
             Serial.printf("Temperature: %.2f C\n", temperature);
             Serial.printf("Humidity: %.2f %%\n", humidity);
-
-            // AUTO: Dieu khien quat theo nhiet do
-            if (currentMode == MODE_AUTO) {
-                if (temperature >= FAN_TEMP_ON) {
-                    fanOn = true;
-                }
-                else if (temperature <= FAN_TEMP_OFF) {
-                    fanOn = false;
-                }
-            }
-
-            digitalWrite(FAN_PIN, fanOn ? HIGH : LOW);
-
         } else {
             Serial.println("Failed to read SHT31!");
-
-            // Tam tat quat khi loi cam bien trong bai kiem thu
-            fanOn = false;
-            digitalWrite(FAN_PIN, LOW);
         }
+
+        // Dieu khien quat theo che do
+        if (currentMode == MODE_AUTO) {
+            if (!sht31Ok) {
+                fanOn = false;
+            }
+            else if (temperature >= FAN_TEMP_ON) {
+                fanOn = true;
+            }
+            else if (temperature <= FAN_TEMP_OFF) {
+                fanOn = false;
+            }
+        }
+        else {
+            fanOn = manualFanOn;
+        }
+
+        digitalWrite(FAN_PIN, fanOn ? HIGH : LOW);
 
         // 2. Doc BH1750
         float lightLux = 0.0f;
@@ -277,7 +366,7 @@ void loop() {
         } else {
             Serial.println("Failed to read BH1750!");
         }
-        
+
         // 3. Doc trang thai muc nuoc
         bool waterOk = digitalRead(WATER_SWITCH_PIN) == HIGH;
 
@@ -286,20 +375,22 @@ void loop() {
         } else {
             Serial.println("Water Level: WATER_LOW");
         }
-        
+
         // 4. Kiem tra dieu khien quat
         Serial.printf(
             "Ventilation Fan: %s\n",
             fanOn ? "ON" : "OFF"
         );
 
-        // 5. AUTO: Dieu khien bom theo do am
-        // Uu tien dieu kien an toan
-        if (currentMode == MODE_MANUAL) {
-            // Tam thoi tat bom trong MANUAL
+        // 5. Dieu khien bom va bao ve muc nuoc
+        if (!waterOk) {
             pumpOn = false;
+            manualPumpOn = false;
         }
-        else if (!waterOk || !sht31Ok) {
+        else if (currentMode == MODE_MANUAL) {
+            pumpOn = manualPumpOn;
+        }
+        else if (!sht31Ok) {
             pumpOn = false;
         }
         else if (humidity <= PUMP_HUM_ON) {
@@ -320,14 +411,13 @@ void loop() {
             Serial.println("WARNING: Water level low - Pump disabled!");
         }
 
-        if (!sht31Ok) {
+        if (!sht31Ok && currentMode == MODE_AUTO) {
             Serial.println("WARNING: SHT31 error - Pump disabled!");
-        }        
-        
-        // 6. AUTO: Dieu khien Grow Light theo BH1750
+        }
+
+        // 6. Dieu khien Grow Light
         if (currentMode == MODE_MANUAL) {
-            // Tam thoi tat den trong MANUAL
-            growLightOn = false;
+            growLightOn = manualGrowLightOn;
         }
         else if (!bh1750Ok) {
             growLightOn = false;
@@ -350,7 +440,7 @@ void loop() {
             growLightOn ? "ON" : "OFF"
         );
 
-        if (!bh1750Ok) {
+        if (!bh1750Ok && currentMode == MODE_AUTO) {
             Serial.println(
                 "WARNING: BH1750 error - Grow Light disabled!"
             );
