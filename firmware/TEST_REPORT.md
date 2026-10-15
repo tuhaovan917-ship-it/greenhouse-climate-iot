@@ -43,3 +43,38 @@ the simulated functional tests on Wokwi.
 
 Physical hardware validation and system integration
 are outside the scope of these test results.
+
+## Manual Control Functional Tests
+
+### Test 1: Manual Fan Control
+- FAN ON: PASS
+- FAN OFF: PASS
+- Fan state matches Wokwi simulation: PASS
+
+### Test 2: Manual Misting Pump Control
+- PUMP ON with WATER_OK: PASS
+- PUMP OFF with WATER_OK: PASS
+- Pump state matches Wokwi simulation: PASS
+
+### Test 3: Manual Grow Light Control
+- LIGHT ON: PASS
+- LIGHT OFF: PASS
+- Light state matches Wokwi simulation: PASS
+
+### Test 4: Pump Water-Level Failsafe
+- Pump stops when WATER_LOW is detected: PASS
+- PUMP ON is rejected during WATER_LOW: PASS
+- Pump remains OFF after water recovery: PASS
+- Manual PUMP ON works after WATER_OK: PASS
+- Manual PUMP OFF works normally: PASS
+
+### Test 5: AUTO / MANUAL Mode Switching
+- Switch from AUTO to MANUAL: PASS
+- Switch from MANUAL to AUTO: PASS
+- Manual device commands operate in MANUAL mode: PASS
+
+### Result
+All listed manual control tests passed in Wokwi simulation.
+
+Note: These results are based on simulation testing,
+not physical hardware validation.
