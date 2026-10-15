@@ -62,6 +62,20 @@
       "top": 170,
       "left": 420,
       "attrs": {}
+    },
+    {
+      "type": "chip-growlight12v",
+      "id": "growlight12v",
+      "top": 320,
+      "left": 520,
+      "attrs": {}
+    },
+    {
+      "type": "chip-mosfet-n",
+      "id": "growlightMosfet",
+      "top": 345,
+      "left": 420,
+      "attrs": {}
     }
   ],
   "connections": [
@@ -89,7 +103,11 @@
     
     ["esp32:D19", "pumpMosfet:GATE", "orange", []],
     ["pumpMosfet:DRAIN", "pump12v:VMINUS", "blue", []],
-    ["pumpMosfet:SOURCE", "esp32:GND.1", "black", []]
+    ["pumpMosfet:SOURCE", "esp32:GND.1", "black", []],
+    
+    ["esp32:D23", "growlightMosfet:GATE", "orange", []],
+    ["growlightMosfet:DRAIN", "growlight12v:VMINUS", "blue", []],
+    ["growlightMosfet:SOURCE", "esp32:GND.1", "black", []]
   ],
   "serialMonitor": {
     "display": "always"

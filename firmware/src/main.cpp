@@ -9,15 +9,22 @@
 #define WATER_SWITCH_PIN 32
 #define FAN_PIN 18
 #define PUMP_PIN 19
+#define GROWLIGHT_PIN 23
 
 unsigned long previousMillis = 0;
 const unsigned long interval = 2000;
+
 bool fanOn = false;
 const float FAN_TEMP_ON = 30.0f;
 const float FAN_TEMP_OFF = 28.0f;
+
 bool pumpOn = false;
 const float PUMP_HUM_ON = 55.0f;
 const float PUMP_HUM_OFF = 65.0f;
+
+bool growLightOn = false;
+const float GROWLIGHT_LUX_ON = 300.0f;
+const float GROWLIGHT_LUX_OFF = 700.0f;
 
 // Tinh CRC-8 cua 2 byte du lieu
 uint8_t calculateCRC(const uint8_t *data) {
@@ -138,6 +145,8 @@ void setup() {
     digitalWrite(FAN_PIN, LOW);
     pinMode(PUMP_PIN, OUTPUT);
     digitalWrite(PUMP_PIN, LOW);
+    pinMode(GROWLIGHT_PIN, OUTPUT);
+    digitalWrite(GROWLIGHT_PIN, LOW);
     initBH1750();
     delay(500);
     scanI2C();
@@ -194,9 +203,10 @@ void loop() {
         }
 
         // 2. Doc BH1750
-        float lightLux;
+        float lightLux = 0.0f;
+        bool bh1750Ok = readBH1750(lightLux);
 
-        if (readBH1750(lightLux)) {
+        if (bh1750Ok) {
             Serial.printf("Light: %.2f lux\n", lightLux);
         } else {
             Serial.println("Failed to read BH1750!");
@@ -219,7 +229,6 @@ void loop() {
 
         // 5. AUTO: Dieu khien bom theo do am
         // Uu tien dieu kien an toan
-
         if (!waterOk || !sht31Ok) {
             pumpOn = false;
         }
@@ -243,6 +252,37 @@ void loop() {
 
         if (!sht31Ok) {
             Serial.println("WARNING: SHT31 error - Pump disabled!");
+        }        
+        
+        // 6. AUTO: Dieu khien Grow Light theo BH1750
+        if (!bh1750Ok) {
+            // Loi cam bien: tat den
+            growLightOn = false;
+        }
+        else if (lightLux <= GROWLIGHT_LUX_ON) {
+            // Anh sang thap: bat den
+            growLightOn = true;
+        }
+        else if (lightLux >= GROWLIGHT_LUX_OFF) {
+            // Anh sang du cao: tat den
+            growLightOn = false;
+        }
+        // Trong vung tre: giu nguyen trang thai
+
+        digitalWrite(
+            GROWLIGHT_PIN,
+            growLightOn ? HIGH : LOW
+        );
+
+        Serial.printf(
+            "Grow Light: %s\n",
+            growLightOn ? "ON" : "OFF"
+        );
+
+        if (!bh1750Ok) {
+            Serial.println(
+                "WARNING: BH1750 error - Grow Light disabled!"
+            );
         }
 
         Serial.println("==================================");

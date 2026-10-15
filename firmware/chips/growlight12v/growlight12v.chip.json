@@ -1,0 +1,13 @@
+
+{
+  "name": "LED Grow Light 12V",
+  "author": "Greenhouse IoT Team",
+  "pins": [
+    "VPLUS",
+    "VMINUS"
+  ],
+  "display": {
+    "width": 190,
+    "height": 90
+  }
+}
