@@ -1,9 +1,9 @@
 # API Contract — Backend ↔ Dashboard (Greenhouse Climate IoT)
 
-**Version:** 0.2 (đã chốt với tv3: bucket, alerts history, online/lastSeenAt, waterOk nullable, API key LAN, Alembic)
+**Version:** 0.2.2 (khóa cùng tv3: TelemetryHistoryResponse cho REST, bỏ bucket khỏi WS, ví dụ envelope `{bucket, data}`)
 **Base URL (dev):** `http://localhost:8000`
 **Docs tự sinh:** `http://localhost:8000/docs` (FastAPI Swagger)
-**Liên quan:** `docs/mqtt-protocol.md` v0.1 trên nhánh `feat/esp32` (topics `greenhouse/01/*`, JSON telemetry/state/command/config); `database/SCHEMA.md` v0.1 trên nhánh `feat/dashboard` (5 bảng, index, dedup alert). File này KHÔNG định nghĩa lại MQTT hay schema DB, chỉ định nghĩa REST/WS cho Dashboard React+Vite+TS.
+**Liên quan:** `docs/mqtt-protocol.md` v0.1 trên nhánh `feat/esp32` (topics `greenhouse/01/*`, JSON telemetry/state/command/config); `database/SCHEMA.md` v0.2 trên nhánh `feat/dashboard` (5 bảng, index, dedup alert, severity). File này KHÔNG định nghĩa lại MQTT hay schema DB, chỉ định nghĩa REST/WS cho Dashboard React+Vite+TS.
 
 > Nguyên tắc (theo báo cáo GĐ2): Dashboard **không nối MQTT trực tiếp**. Mọi dữ liệu/lệnh đi qua Backend. ESP32 không có clock tin cậy nên mọi `receivedAt/updatedAt` đều do Backend sinh (UTC ISO8601).
 
@@ -40,17 +40,30 @@
 export type ControlMode = "AUTO" | "MANUAL";
 export type DeviceName = "fan" | "mist" | "lamp";
 export type CommandStatus = "PENDING" | "APPLIED" | "REJECTED" | "TIMEOUT";
+export type TerminalCommandResult = "APPLIED" | "REJECTED" | "TIMEOUT"; // WS command_result chỉ dùng 3 giá trị này, không dùng PENDING
+export type Bucket = "raw" | "1m" | "5m" | "1h";
 export type AlertCode = "NO_WATER" | "SENSOR_FAULT" | "OFFLINE";
 export type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
 
 export interface Telemetry {
-  id: number;
+  id: number; // chỉ có ở bucket=raw; response bucket tổng hợp dùng TelemetryBucket (không có id)
   deviceId: string;
   temperatureC: number | null;
   humidityPct: number | null;
   lightLux: number | null;
   waterOk: boolean | null;
   receivedAt: string; // ISO8601 UTC, do Backend sinh
+}
+
+export interface TelemetryBucket {
+  deviceId: string;
+  bucketStart: string; // ISO8601 UTC, thời điểm bắt đầu bucket (căn UTC, xem mục 3.2)
+  bucket: Exclude<Bucket, "raw">;
+  sampleCount: number; // số bản tin raw trong [bucketStart, bucketEnd)
+  temperatureC: number | null; // average bỏ NULL, all-null thì null
+  humidityPct: number | null;
+  lightLux: number | null;
+  waterOk: boolean | null; // giá trị khác null cuối bucket, all-null thì null
 }
 
 export interface DeviceState {
@@ -99,11 +112,18 @@ export interface Alert {
   resolvedAt: string | null;
 }
 
+// REST lịch sử (mục 3.2). Backend KHÔNG push bucket qua WS; WS chỉ luồng raw telemetry.
+export interface TelemetryHistoryResponse {
+  bucket: Bucket;
+  data: Telemetry[] | TelemetryBucket[]; // Bucket="raw" -> Telemetry[], ngược lại -> TelemetryBucket[]
+}
+
 export type WsMessage =
-  | { type: "telemetry"; data: Telemetry }
+  | { type: "telemetry"; data: Telemetry } // luôn raw, mỗi bản tin nhận từ MQTT
   | { type: "state"; data: DeviceState }
-  | { type: "command_result"; data: { commandId: string; result: CommandStatus; reason?: string | null } }
+  | { type: "command_result"; data: { commandId: string; result: TerminalCommandResult; reason?: string | null; wasLate?: boolean } }
   | { type: "alert"; data: Alert };
+// Quy ước: PENDING chỉ xuất hiện ở REST 202 + GET /commands, không bao giờ xuất hiện trong WS command_result hay state.lastCommandResult.
 ```
 
 ---
@@ -114,11 +134,19 @@ export type WsMessage =
 Kiểm tra sống. Trả về `{ "status": "ok", "mqttConnected": true, "db": "ok" }`.
 
 ### 3.2 `GET /api/telemetry?deviceId=greenhouse-01&from=&to=&limit=100&order=desc&bucket=raw|1m|5m|1h`
-Lịch sử vẽ biểu đồ. `from/to` ISO8601, `limit` mặc định 100 max 1000 (đếm theo bucket khi dùng bucket), `order` asc/desc, `bucket` mặc định `raw`.
-- `raw`: trả từng bản ghi.
-- `1m|5m|1h`: số lấy average bỏ NULL, `waterOk` lấy giá trị khác null cuối bucket (all-null thì null), bucket trống bỏ qua, `receivedAt` = `bucketStart`. V0.1 tổng hợp lúc query, chưa bảng aggregate.
+Lịch sử vẽ biểu đồ. `from/to` ISO8601 theo semantics **[from, to)** (`from` inclusive, `to` exclusive, vắng `to` = now) để các lần query liên tiếp không trùng dữ liệu. `limit` mặc định 100 max 1000 (đếm theo bucket khi dùng bucket), `order` asc/desc áp dụng cho `receivedAt`/`bucketStart` (khóa phụ `id` cho raw).
+- `raw`: `data` là `Telemetry[]`.
+- `1m|5m|1h`: `data` là `TelemetryBucket[]`. Bucket căn theo UTC epoch (`1m` tại :00, `5m` tại :00/:05/..., `1h` tại đầu giờ); `bucketStart` là thời điểm bắt đầu bucket; số lấy average bỏ NULL; `waterOk` lấy giá trị khác null cuối bucket (all-null thì null); `sampleCount` đếm mọi bản tin raw trong bucket; bucket trống bỏ qua. V0.1 tổng hợp lúc query, chưa bảng aggregate.
+Envelope luôn là `TelemetryHistoryResponse` (`{ bucket, data }`) cho cả hai trường hợp.
+
+`bucket=raw`:
 ```json
-{ "data": [ { "id": 1, "deviceId": "greenhouse-01", "temperatureC": 30.5, "humidityPct": 65.2, "lightLux": 450, "waterOk": true, "receivedAt": "2026-10-15T10:00:00Z" } ] }
+{ "bucket": "raw", "data": [ { "id": 1, "deviceId": "greenhouse-01", "temperatureC": 30.5, "humidityPct": 65.2, "lightLux": 450, "waterOk": true, "receivedAt": "2026-10-15T10:00:00Z" } ] }
+```
+
+`bucket=5m`:
+```json
+{ "bucket": "5m", "data": [ { "deviceId": "greenhouse-01", "bucketStart": "2026-10-15T10:00:00Z", "bucket": "5m", "sampleCount": 12, "temperatureC": 30.4, "humidityPct": 65.0, "lightLux": 452.3, "waterOk": true } ] }
 ```
 
 ### 3.3 `GET /api/telemetry/latest?deviceId=greenhouse-01`
@@ -134,7 +162,8 @@ Gửi lệnh MANUAL. Body:
 ```
 Backend sinh `commandId` (`cmd-<uuid ngắn>`), ghi `command_logs` `PENDING` (`requestedAt` = giờ nhận REST), publish MQTT `greenhouse/01/command` `{ commandId, device, on }` (QoS 1, retain false).
 Trả về `202`: `{ "commandId": "cmd-a1b2", "status": "PENDING" }`.
-ESP32 chỉ thực thi khi đang `MANUAL` + qua kiểm tra an toàn, phản hồi qua topic `state`. Backend cập nhật `APPLIED/REJECTED` (`completedAt` = giờ nhận phản hồi). Nếu 5s không phản hồi Backend tự đánh `TIMEOUT` (Backend-side, không thuộc MQTT spec). Ví dụ bồn hết nước → `mist=true` bị `REJECTED` lý do `NO_WATER`, bơm vẫn tắt.
+ESP32 chỉ thực thi khi đang `MANUAL` + qua kiểm tra an toàn, phản hồi qua topic `state`. Backend cập nhật `APPLIED/REJECTED` (`completedAt` = giờ nhận phản hồi). Nếu `COMMAND_TIMEOUT_S` (mặc định 5s) không phản hồi Backend tự đánh `TIMEOUT` (`completedAt` = giờ timeout, Backend-side, không thuộc MQTT spec) và push WS một lần.
+**Late response (sau TIMEOUT):** phản hồi thiết bị đến muộn luôn được chấp nhận (last-write-wins theo `completedAt`): ghi đè `TIMEOUT` thành `APPLIED/REJECTED` thực tế, push thêm một WS `command_result` kèm `wasLate: true`, đồng thời cập nhật `device_state.lastCommand*` theo phản hồi mới nhất. Trùng lặp QoS 1 (cùng `commandId` + cùng kết quả) là no-op, không push WS thừa. Dashboard key theo `commandId`, hiển thị kết quả cuối, hiện ghi chú "phản hồi trễ" khi `wasLate`, không tự gửi lại lệnh chỉ vì `TIMEOUT` (gửi lại = `commandId` mới). `COMMAND_TIMEOUT_S` cấu hình được qua env.
 
 ### 3.6 `GET /api/commands?deviceId=&limit=50`
 Lịch sử lệnh (`PENDING/APPLIED/REJECTED/TIMEOUT`, `reason`). Dùng hiện toast/log.
@@ -152,9 +181,10 @@ Lịch sử + hiện tại cảnh báo (`NO_WATER`, `SENSOR_FAULT`, `OFFLINE`). 
 ## 4. WebSocket realtime
 
 ### `WS /ws?deviceId=greenhouse-01`
-1 socket duy nhất, message theo `WsMessage` (mục 2). Ví dụ rút gọn:
+1 socket duy nhất, message theo `WsMessage` (mục 2). `command_result.result` chỉ nhận `APPLIED | REJECTED | TIMEOUT` (không nhận `PENDING`). Ví dụ rút gọn:
 ```json
 { "type": "state", "data": { "deviceId": "greenhouse-01", "mode": "MANUAL", "fan": true, "online": true, "lastSeenAt": "...", "updatedAt": "..." } }
+{ "type": "command_result", "data": { "commandId": "cmd-a1b2", "result": "APPLIED", "wasLate": false } }
 ```
 Quy tắc: mất WS fallback polling `GET /latest` + `GET /state` mỗi 5s; nối lại thì tải latest state + `GET /alerts?active=true` trước khi nhận realtime. Backend push `state` khi nhận MQTT `state/status`, push `telemetry` khi nhận MQTT `telemetry` (~5s).
 
@@ -193,6 +223,8 @@ Idempotency: MQTT QoS 1 có thể trùng, ESP32 de-dupe theo `commandId`. `comma
 
 ---
 
-## 9. Thay đổi ở v0.2 (khóa với tv3)
+## 9. Thay đổi ở v0.2 / v0.2.1 (khóa với tv3)
 
-1. Thêm `bucket` + quy tắc aggregate; 2. Giữ `GET /alerts` + filter `active/code`; 3. `online/lastSeenAt` + timeout 15s + severity; 4. `waterOk nullable`; 5. Types `CommandLog/Alert/WsMessage` + `TIMEOUT`; 6. `POST /config` trả `PUBLISHED` (chưa ack); 7. Auth API key LAN; 8. Workflow Alembic; 9. Sửa typo REST + de-dupe.
+- v0.2: thêm `bucket` + quy tắc aggregate; giữ `GET /alerts` + filter `active/code`; `online/lastSeenAt` + timeout 15s + severity; `waterOk nullable`; types `CommandLog/Alert/WsMessage` + `TIMEOUT`; `POST /config` trả `PUBLISHED` (chưa ack); auth API key LAN; workflow Alembic; sửa typo REST + de-dupe.
+- v0.2.1 (làm rõ sau commit `076adf3` của tv3, không đổi MQTT payload): 1. bucket trả `TelemetryBucket` riêng (có `sampleCount`, không dùng `Telemetry.id`), căn bucket UTC epoch, lọc `[from, to)`; 2. late response sau `TIMEOUT` luôn ghi đè thành `APPLIED/REJECTED` + push WS kèm `wasLate: true` (last-write-wins, trùng QoS 1 là no-op, `COMMAND_TIMEOUT_S` cấu hình được); 3. `command_result.result` thu hẹp `TerminalCommandResult` (không nhận `PENDING`).
+- v0.2.2 (chỉnh theo tv3): 1. bỏ `telemetry_bucket` khỏi `WsMessage`, thêm type REST `TelemetryHistoryResponse`; 2. ví dụ JSON mục 3.2 có envelope `{bucket, data}` cho cả `raw` và bucket; 3. tham chiếu `SCHEMA.md` v0.2.
