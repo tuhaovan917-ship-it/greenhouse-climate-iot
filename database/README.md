@@ -2,14 +2,14 @@
 
 ## 1. Trạng thái tài liệu
 
-- Phiên bản: `0.1-draft`.
+- Phiên bản: `0.2-aligned`.
 - Người phụ trách thiết kế schema/migration: Người 3 - Database & Dashboard.
 - Người phụ trách kết nối và truy vấn runtime: Người 2 - Backend & MQTT.
-- Tài liệu cần Người 2 và lead review trước khi khóa schema v0.1.
+- Workflow schema/migration đã được Người 2 và Người 3 thống nhất trong API contract v0.2. Các thay đổi schema thực tế vẫn cần hai bên review qua Pull Request.
 
 Schema chi tiết được mô tả tại [`SCHEMA.md`](./SCHEMA.md).
 
-## 2. Công nghệ đã đề xuất
+## 2. Công nghệ đã thống nhất
 
 | Thành phần | Lựa chọn v0.1 |
 |---|---|
@@ -49,7 +49,7 @@ Mục tiêu là cùng một schema logic chạy được trên SQLite và Postgr
 Backend đọc cấu hình từ biến môi trường:
 
 ```env
-# SQLite demo (đường dẫn chính xác cần Người 2 xác nhận)
+# SQLite demo
 DATABASE_URL=sqlite:///./greenhouse.db
 
 # PostgreSQL ví dụ, không commit credential thật
@@ -74,7 +74,7 @@ Yêu cầu:
 - Các trạng thái dạng enum được lưu bằng chuỗi có tập giá trị giới hạn để giữ tính tương thích SQLite/PostgreSQL.
 - Telemetry là dữ liệu append-only; state/config là dữ liệu latest theo `device_id`; command và alert có vòng đời trạng thái.
 
-## 6. Migration workflow đề xuất
+## 6. Migration workflow đã thống nhất
 
 ```text
 Thay đổi yêu cầu
@@ -100,14 +100,17 @@ add_telemetry_device_time_index
 - SQLite demo bật WAL để giảm xung đột giữa luồng ghi MQTT và các truy vấn đọc từ Dashboard.
 - Mỗi MQTT message được xử lý trong transaction ngắn.
 - Ghi telemetry không được giữ transaction trong lúc gửi WebSocket.
-- Với command, tạo bản ghi `PENDING` trước khi publish MQTT; sau phản hồi ESP32 mới cập nhật `APPLIED`/`REJECTED`.
+- Với command, tạo bản ghi `PENDING` trước khi publish MQTT; sau phản hồi ESP32 mới cập nhật `APPLIED`/`REJECTED`. Sau 5 giây chưa có phản hồi, Backend đánh `TIMEOUT`.
 - State hiển thị trên Dashboard phải là state thực tế nhận từ ESP32, không suy ra từ command vừa gửi.
 - Alert lặp lại mỗi chu kỳ telemetry phải cập nhật alert đang active, không tạo một hàng mới sau mỗi 5 giây.
+- `NO_WATER` và `OFFLINE` có severity `CRITICAL`; `SENSOR_FAULT` có severity `WARNING`.
+- Demo đóng alert ngay khi điều kiện hết; bản hoàn thiện đóng sau 3 mẫu tốt liên tiếp.
 
 ## 8. Retention và downsampling
 
 - V0.1 chưa tự động xóa telemetry.
-- REST lịch sử nên hỗ trợ `bucket=raw|1m|5m|1h` để Dashboard không tải toàn bộ dữ liệu thô cho khoảng thời gian dài.
+- REST lịch sử hỗ trợ `bucket=raw|1m|5m|1h`; mặc định `raw`, `limit` đếm theo bucket khi tổng hợp.
+- Giá trị số trong bucket lấy trung bình và bỏ `NULL`; `water_ok` lấy giá trị khác null cuối cùng, all-null trả `NULL`, bucket trống bị bỏ qua.
 - V0.1 không cần bảng aggregate riêng; Backend có thể tổng hợp khi query.
 - Nếu dữ liệu thực tế tăng lớn, nhóm sẽ chốt retention và bảng aggregate trong phiên bản sau.
 
@@ -123,7 +126,7 @@ add_telemetry_device_time_index
 - Có migration khởi tạo toàn bộ bảng và index đã duyệt.
 - Migration chạy thành công trên SQLite sạch.
 - Backend insert/query được telemetry và state.
-- Command chuyển đúng `PENDING -> APPLIED/REJECTED`.
+- Command chuyển đúng `PENDING -> APPLIED/REJECTED/TIMEOUT`.
 - Alert không bị tạo trùng mỗi chu kỳ cảm biến.
 - API lịch sử lọc đúng device/time và trả thứ tự ổn định.
 - Không có `.env`, credential hoặc file database runtime trong Git.

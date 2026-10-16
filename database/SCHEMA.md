@@ -1,8 +1,8 @@
-# Database Schema v0.1 - Greenhouse Climate IoT
+# Database Schema v0.2 - Greenhouse Climate IoT
 
 ## 1. Trạng thái
 
-Đây là schema **đề xuất** của Người 3 để Người 2 và lead review. Tên API cuối cùng vẫn tuân theo `docs/api-contract.md` sau khi contract được duyệt và merge.
+Schema này đã được đồng bộ với `docs/api-contract.md` v0.2 tại commit `917f726` của nhánh `feat/backend`. SQLModel table models và mọi Alembic migration sinh từ schema vẫn phải được Người 2 và Người 3 cùng review.
 
 Các nguyên tắc:
 
@@ -84,7 +84,7 @@ Theo dõi vòng đời lệnh gửi từ Dashboard tới ESP32.
 | `device_id` | varchar(64) | Không | Thiết bị nhận lệnh |
 | `device` | varchar(16) | Không | `fan`, `mist` hoặc `lamp` |
 | `requested_on` | boolean | Không | Trạng thái Dashboard yêu cầu |
-| `status` | varchar(16) | Không | `PENDING`, `APPLIED`, `REJECTED` |
+| `status` | varchar(16) | Không | `PENDING`, `APPLIED`, `REJECTED`, `TIMEOUT` |
 | `reason` | varchar(64) | Có | Lý do từ chối hoặc lỗi |
 | `requested_at` | datetime UTC | Không | Lúc Backend nhận REST request |
 | `completed_at` | datetime UTC | Có | Lúc nhận kết quả cuối từ ESP32 |
@@ -98,7 +98,8 @@ Quy tắc:
 
 - Backend ghi `PENDING` trước khi publish MQTT.
 - Chỉ state/command result thực tế mới chuyển sang `APPLIED` hoặc `REJECTED`.
-- Nếu không có phản hồi trong timeout đã thống nhất, API có thể trả trạng thái bổ sung `TIMEOUT`; cần chốt với Người 2 trước khi thêm vào contract.
+- Nếu không có phản hồi sau 5 giây, Backend chuyển lệnh sang `TIMEOUT`; đây là trạng thái Backend-side, không thay đổi MQTT spec.
+- Cần Backend làm rõ cách xử lý phản hồi hợp lệ đến sau `TIMEOUT`: giữ timeout hay cập nhật thành kết quả cuối `APPLIED/REJECTED`.
 
 ## 6. Bảng `alerts`
 
@@ -152,20 +153,20 @@ Constraint:
 - `humidity_on_pct < humidity_off_pct`.
 - `light_on_lux < light_off_lux`.
 
-Cần xác nhận:
+Quy tắc v0.2:
 
 - Firmware hiện chưa có `configId` hoặc payload phản hồi toàn bộ ngưỡng, nên Backend chưa thể khẳng định config đã được áp dụng.
-- Nếu nhóm cần trạng thái `APPLIED/REJECTED`, phải bổ sung cơ chế acknowledgement vào MQTT contract trước.
+- `POST /api/config` chỉ trả `PUBLISHED` kèm desired config. Nếu nhóm cần trạng thái `APPLIED/REJECTED`, phải bổ sung acknowledgement và `configId` vào MQTT contract trước.
 
 ## 8. Alert derivation v0.1
 
-| Code | Điều kiện mở | Điều kiện đóng |
-|---|---|---|
-| `NO_WATER` | `water_ok=false` hoặc failsafe vì nước | `water_ok=true` ổn định theo quy tắc Backend |
-| `SENSOR_FAULT` | Một trường cảm biến bắt buộc là `NULL` | Các trường hợp lệ trở lại |
-| `OFFLINE` | MQTT status offline hoặc quá timeout | Nhận status online/message hợp lệ mới |
+| Code | Severity | Điều kiện mở | Điều kiện đóng |
+|---|---|---|---|
+| `NO_WATER` | `CRITICAL` | Chỉ khi `water_ok=false` | `water_ok=true`; `null` chuyển sang lỗi cảm biến, không phải hết nước |
+| `SENSOR_FAULT` | `WARNING` | Một trường cảm biến bắt buộc là `NULL` | Các trường hợp lệ trở lại |
+| `OFFLINE` | `CRITICAL` | MQTT LWT offline hoặc 15 giây không có message hợp lệ | Nhận status online/message hợp lệ mới |
 
-Khoảng timeout, số mẫu ổn định để đóng cảnh báo và severity cần được Người 2/lead xác nhận.
+Demo đóng alert ngay khi điều kiện hết. Bản hoàn thiện yêu cầu 3 mẫu tốt liên tiếp trước khi đóng để hạn chế trạng thái chập chờn.
 
 ## 9. Query phục vụ Dashboard
 
@@ -183,10 +184,12 @@ Khoảng timeout, số mẫu ổn định để đóng cảnh báo và severity 
 
 ### History bucket
 
-- Bucket dự kiến: `1m`, `5m`, `1h`.
+- Bucket đã thống nhất: `raw`, `1m`, `5m`, `1h`; mặc định `raw`.
 - `temperature_c`, `humidity_pct`, `light_lux`: trung bình các giá trị khác `NULL`.
-- `water_ok`: giá trị hợp lệ cuối bucket.
+- `water_ok`: giá trị khác null cuối bucket; nếu tất cả đều null thì trả `NULL`.
 - Bucket không có dữ liệu được bỏ qua; Dashboard tự thể hiện khoảng trống.
+- `limit` đếm theo số bucket khi tổng hợp.
+- `received_at` của dữ liệu tổng hợp là thời điểm bắt đầu bucket (`bucketStart`).
 - Không tạo aggregate table trong v0.1.
 
 ### Active alerts
@@ -194,13 +197,19 @@ Khoảng timeout, số mẫu ổn định để đóng cảnh báo và severity 
 - Lọc `device_id`, `active=true`.
 - Sắp xếp `started_at DESC, id DESC`.
 
-## 10. Kiểm thử schema/migration
+## 10. Chi tiết contract còn cần làm rõ
+
+1. Bucket tổng hợp không có `id` tự nhiên nhưng API `Telemetry.id` đang bắt buộc. Đề xuất response type riêng `TelemetryBucket` có `sampleCount`.
+2. Cần chốt căn bucket theo UTC và semantics khoảng lọc `[from, to)` để các lần query liên tiếp không trùng dữ liệu.
+3. Cần chốt quy tắc cập nhật command khi phản hồi MQTT đến sau `TIMEOUT`.
+
+## 11. Kiểm thử schema/migration
 
 1. Chạy migration từ database SQLite rỗng.
 2. Insert telemetry hợp lệ và telemetry có trường `NULL`.
 3. Từ chối humidity ngoài 0–100 và light âm nếu constraint DB được bật.
 4. Upsert state không tạo nhiều hàng cho cùng `device_id`.
-5. Command chuyển `PENDING -> APPLIED/REJECTED` đúng thời điểm.
+5. Command chuyển `PENDING -> APPLIED/REJECTED/TIMEOUT` đúng thời điểm và kiểm thử phản hồi đến muộn sau timeout.
 6. Alert lặp cập nhật `last_seen_at`, không tạo hàng trùng.
 7. Alert resolved có thể tái mở thành một đợt mới.
 8. Query history sử dụng đúng composite index.
