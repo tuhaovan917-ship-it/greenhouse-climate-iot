@@ -1,6 +1,6 @@
 # API Contract — Backend ↔ Dashboard (Greenhouse Climate IoT)
 
-**Version:** 0.2.4 (sau review của tv3: TIMEOUT push qua WebSocket, heartbeat do server gửi, CheckConstraint trong models)
+**Version:** 0.2.5 (Dashboard tải song song 6 endpoint: `/api/state` và `/api/telemetry/latest` trả `200` với dữ liệu rỗng thay vì lỗi)
 **Base URL (dev):** `http://localhost:8000`
 **Docs tự sinh:** `http://localhost:8000/docs` (FastAPI Swagger)
 **Liên quan:** `docs/mqtt-protocol.md` v0.1 trên nhánh `feat/esp32` (topics `greenhouse/01/*`, JSON telemetry/state/command/config); `database/SCHEMA.md` v0.2 trên nhánh `feat/dashboard` (5 bảng, index, dedup alert, severity). File này KHÔNG định nghĩa lại MQTT hay schema DB, chỉ định nghĩa REST/WS cho Dashboard React+Vite+TS.
@@ -55,6 +55,7 @@ export interface Telemetry {
   waterOk: boolean | null;
   receivedAt: string; // ISO8601 UTC, do Backend sinh
 }
+// GET /api/telemetry/latest trả `null` khi chưa có bản tin nào.
 
 export interface TelemetryBucket {
   deviceId: string;
@@ -79,7 +80,7 @@ export interface DeviceState {
   lastCommandId: string | null;
   lastCommandResult: "APPLIED" | "REJECTED" | null;
   reason?: string | null; // NOT_MANUAL_MODE | NO_WATER | ...
-  updatedAt: string;
+  updatedAt: string | null; // null khi thiết bị chưa từng gửi state
 }
 
 export interface DeviceConfig {
@@ -155,10 +156,11 @@ Envelope luôn là `TelemetryHistoryResponse` (`{ bucket, data }`) cho cả hai 
 ```
 
 ### 3.3 `GET /api/telemetry/latest?deviceId=greenhouse-01`
-1 bản tin mới nhất (`receivedAt DESC, id DESC`), dùng khi WS chưa nối.
+1 bản tin mới nhất (`receivedAt DESC, id DESC`), dùng khi WS chưa nối. **Nếu chưa có bản tin nào thì trả `200` với body `null`** (không phải lỗi) — Dashboard tải song song nhiều endpoint, một lỗi ở đây sẽ làm hỏng cả trang.
 
 ### 3.4 `GET /api/state?deviceId=greenhouse-01`
 Trạng thái **thực tế** từ ESP32 (cache topic `state` + `status`), gồm `online`, `lastSeenAt`, `updatedAt`. `online=false` khi LWT offline hoặc quá 15s không có message hợp lệ. Dashboard hiển thị cái này, không tự đoán thiết bị đã bật chỉ vì vừa bấm nút. Reload trang gọi lại endpoint này + `GET /api/alerts?active=true`.
+**Nếu thiết bị chưa từng gửi state thì trả `200` với trạng thái mặc định** (`mode: "AUTO"`, các thiết bị `false`, `failsafeActive: false`, `online: false`, `lastSeenAt: null`, `updatedAt: null`) thay vì lỗi 404.
 
 ### 3.5 `POST /api/commands`
 Gửi lệnh MANUAL. Body:
@@ -242,3 +244,4 @@ Idempotency: MQTT QoS 1 có thể trùng, ESP32 de-dupe theo `commandId`. `comma
 - v0.2.2 (chỉnh theo tv3): 1. bỏ `telemetry_bucket` khỏi `WsMessage`, thêm type REST `TelemetryHistoryResponse`; 2. ví dụ JSON mục 3.2 có envelope `{bucket, data}` cho cả `raw` và bucket; 3. tham chiếu `SCHEMA.md` v0.2.
 - v0.2.3 (Backend đã triển khai, không đổi tên trường/topic): 1. `limit` lấy N mới nhất, `order` chỉ đảo thứ tự trả về; 2. vượt `MAX_SCAN_ROWS` trả 400 thay vì cắt bớt; 3. giá trị cảm biến ngoài dải vật lý → `null` kèm log; 4. `mode` trong body không phân biệt hoa thường.
 - v0.2.4 (sau review tv3): 1. `TIMEOUT` push WebSocket `command_result` (`result: "TIMEOUT"`, `reason: "TIMEOUT"`); 2. heartbeat: server ping mỗi 20s (`{"type":"ping"}`), socket không bị đóng vì Dashboard im lặng, Dashboard không cần gửi ping; 3. `app/models.py` có CheckConstraint cho `humidity_pct` (0–100) và `light_lux` (≥ 0) để Alembic sinh migration đúng `SCHEMA.md` §3; 4. `psycopg[binary]` có trong `requirements.txt` cho đường PostgreSQL.
+- v0.2.5 (tích hợp Dashboard): 1. `GET /api/telemetry/latest` trả `200` + `null` thay vì 400 khi chưa có dữ liệu; 2. `GET /api/state` trả `200` + trạng thái mặc định (`online: false`) thay vì 404 khi thiết bị chưa gửi state; 3. type `DeviceState.updatedAt` thành `string | null`. Dashboard tải 6 endpoint song song nên không endpoint nào được trả lỗi khi hệ thống còn trống.

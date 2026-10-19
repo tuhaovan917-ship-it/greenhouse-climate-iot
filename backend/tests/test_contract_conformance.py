@@ -384,9 +384,29 @@ def test_c34_stale_device_goes_offline_after_device_timeout() -> None:
     assert stateService.onlineFlags()[DEVICE] is False
 
 
-def test_c34_unknown_device_state_returns_404(client: TestClient) -> None:
+def test_c34_unknown_device_state_returns_offline_default(client: TestClient) -> None:
+    """C3.4 (v0.2.5): no state row -> 200 with a safe offline default, not an error.
+
+    The Dashboard loads several endpoints in parallel, so an error here would
+    break the whole page before the device ever connects.
+    """
     response = client.get("/api/state", params={"deviceId": "khong-ton-tai-99"})
-    assert response.status_code == 404
+    assert response.status_code == 200
+    body = response.json()
+    assert body["online"] is False
+    assert body["mode"] == "AUTO"
+    assert body["fan"] is False and body["mist"] is False and body["lamp"] is False
+    assert body["failsafeActive"] is False
+    assert body["lastSeenAt"] is None
+    assert body["updatedAt"] is None
+
+
+def test_c33_latest_telemetry_is_null_when_empty(client: TestClient) -> None:
+    """C3.3 (v0.2.5): no reading -> 200 with body null, not an error."""
+    _clearTelemetry()
+    response = client.get("/api/telemetry/latest", params={"deviceId": "thiet-bi-chua-co-du-lieu"})
+    assert response.status_code == 200
+    assert response.json() is None
 
 
 def test_c34_unknown_mode_is_ignored() -> None:

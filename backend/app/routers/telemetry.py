@@ -58,13 +58,18 @@ def getTelemetryHistory(
 
 @router.get(
     "/telemetry/latest",
-    response_model=TelemetryOut,
-    summary="Ban tin cam bien moi nhat",
+    response_model=TelemetryOut | None,
+    summary="Ban tin cam bien moi nhat (null neu chua co du lieu)",
 )
 def getLatestTelemetry(
     deviceId: str = Query(default=settings.device_id),
     session: Session = Depends(getSession),
-) -> TelemetryOut:
+) -> TelemetryOut | None:
+    """Returns `null` instead of an error when no reading exists yet.
+
+    The Dashboard loads several endpoints in parallel, so an error here would
+    break the whole page on a fresh start.
+    """
     from sqlmodel import select
 
     from app.models import TelemetryReading
@@ -77,5 +82,5 @@ def getLatestTelemetry(
     )
     row = session.exec(statement).first()
     if row is None:
-        raise badRequest("Chua co du lieu cam bien cho thiet bi nay")
+        return None
     return TelemetryOut.model_validate(row)

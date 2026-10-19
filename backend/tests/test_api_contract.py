@@ -58,8 +58,10 @@ def testHealth(client: TestClient) -> None:
 
 
 def testStateForUnknownDevice(client: TestClient) -> None:
-    """Contract 3.4: a device with no state row answers 404, not a fake state."""
-    assert client.get("/api/state", params={"deviceId": "thiet-bi-khong-ton-tai"}).status_code == 404
+    """Contract 3.4: a device with no state row answers 200 with an offline default."""
+    response = client.get("/api/state", params={"deviceId": "thiet-bi-khong-ton-tai"})
+    assert response.status_code == 200
+    assert response.json()["online"] is False
 
 
 # --- telemetry ingestion + history ---

@@ -180,18 +180,25 @@ Mo `http://localhost:8000/docs` de xem va go truc tiep cac request tren.
 ```bash
 pip install pytest pytest-asyncio httpx
 
-pytest -q                              # 53 test: tuong thong contract + REST + review tv3
+pytest -q                              # 54 test: tuong thong contract + REST + review tv3
 python scripts/e2e_check.py            # REST + WebSocket + ingest
 python scripts/mqtt_check.py           # MQTT that voi broker amqtt
 python scripts/timeout_check.py        # TIMEOUT push WS + late response
 python scripts/mock_demo_check.py      # demo_esp32_mock.py phan hoi dung
+python scripts/protocol_crosscheck.py  # khoa payload MQTT voi docs/mqtt-protocol.md
 python scripts/ws_probe.py ws://127.0.0.1:8000/ws   # heartbeat voi server dang chay
+python scripts/dashboard_replay.py http://127.0.0.1:8000  # replay dung request cua Dashboard
 ```
 
 `tests/test_contract_conformance.py` co mot test cho **tung dieu khoan** cua
-`docs/api-contract.md` v0.2.4 (ten test ghi ro muc C2, C3.2, C3.5...).
+`docs/api-contract.md` v0.2.5 (ten test ghi ro muc C2, C3.2, C3.5...).
 `tests/test_tv3_review_points.py` kiem tra cac diem tv3 yeu cau xac nhan truoc khi
 khoa metadata Alembic.
+
+`scripts/dashboard_replay.py` goi y het cac request ma Dashboard (tv3) gui:
+6 endpoint song song + 4 lich su theo bucket + duong ghi lenh, kiem tra status va
+shape JSON. `scripts/protocol_crosscheck.py` doi chieu key cua payload MQTT giua
+`docs/mqtt-protocol.md` (nhánh `feat/esp32`) va code Backend.
 
 `scripts/*_check.py` chay broker `amqtt` ngay trong may (chi la dependency dev,
 khong nam trong `requirements.txt`) nen khong can Docker.

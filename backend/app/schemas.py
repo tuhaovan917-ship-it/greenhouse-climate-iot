@@ -90,7 +90,8 @@ class DeviceStateOut(CamelModel):
     last_command_id: str | None = None
     last_command_result: Literal["APPLIED", "REJECTED"] | None = None
     reason: str | None = None
-    updated_at: UtcDateTime
+    # null when the device has never published its state yet.
+    updated_at: UtcDateTime | None = None
 
 
 class DeviceConfigOut(CamelModel):
