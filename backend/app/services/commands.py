@@ -101,8 +101,14 @@ class CommandService:
     # --- transitions ---
 
     def _markTimeout(self, commandId: str) -> None:
+        """Mark a command TIMEOUT and tell the Dashboard (contract 3.5).
+
+        The Dashboard must learn about the timeout through the WebSocket, not
+        only by polling `GET /api/commands`.
+        """
         from app.database import sessionScope  # local import avoids a cycle
 
+        timedOut: tuple[str, str] | None = None
         try:
             with sessionScope() as session:
                 log = self.get(session, commandId)
@@ -111,11 +117,42 @@ class CommandService:
                 log.status = COMMAND_TIMEOUT
                 log.reason = REASON_TIMEOUT
                 log.completed_at = utcNow()
+                timedOut = (log.device_id, log.command_id)
                 logger.warning("command timeout: %s", commandId)
         except Exception:  # noqa: BLE001 - never kill the timeout task
             logger.exception("failed to mark timeout for %s", commandId)
         finally:
             self._tasks.pop(commandId, None)
+
+        if timedOut is not None:
+            self._publishTimeout(timedOut[0], timedOut[1])
+
+    def _publishTimeout(self, deviceId: str, commandId: str) -> None:
+        """Push the TIMEOUT result to the Dashboard."""
+        from app.schemas import WsCommandResultMessage
+        from app.ws_manager import wsManager
+
+        message = WsCommandResultMessage(
+            data={
+                "command_id": commandId,
+                "result": COMMAND_TIMEOUT,
+                "reason": REASON_TIMEOUT,
+                "was_late": False,
+            }
+        )
+
+        async def _send() -> None:
+            await wsManager.broadcast(
+                deviceId, message.model_dump(mode="json", by_alias=True)
+            )
+
+        if self._loop is None:
+            logger.warning("no loop bound, timeout not pushed for %s", commandId)
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(_send(), self._loop)
+        except RuntimeError:
+            logger.warning("event loop closed, timeout not pushed for %s", commandId)
 
     def applyResult(
         self,

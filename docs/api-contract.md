@@ -1,6 +1,6 @@
 # API Contract — Backend ↔ Dashboard (Greenhouse Climate IoT)
 
-**Version:** 0.2.3 (Backend đã triển khai: chốt nghĩa `limit`, lỗi khi quá `MAX_SCAN_ROWS`, giá trị cảm biến ngoài dải thành NULL, `mode` không phân biệt hoa thường)
+**Version:** 0.2.4 (sau review của tv3: TIMEOUT push qua WebSocket, heartbeat do server gửi, CheckConstraint trong models)
 **Base URL (dev):** `http://localhost:8000`
 **Docs tự sinh:** `http://localhost:8000/docs` (FastAPI Swagger)
 **Liên quan:** `docs/mqtt-protocol.md` v0.1 trên nhánh `feat/esp32` (topics `greenhouse/01/*`, JSON telemetry/state/command/config); `database/SCHEMA.md` v0.2 trên nhánh `feat/dashboard` (5 bảng, index, dedup alert, severity). File này KHÔNG định nghĩa lại MQTT hay schema DB, chỉ định nghĩa REST/WS cho Dashboard React+Vite+TS.
@@ -122,6 +122,7 @@ export interface TelemetryHistoryResponse {
 export type WsMessage =
   | { type: "telemetry"; data: Telemetry } // luôn raw, mỗi bản tin nhận từ MQTT
   | { type: "state"; data: DeviceState }
+  | { type: "ping" } // heartbeat từ server (v0.2.4), Dashboard bỏ qua
   | { type: "command_result"; data: { commandId: string; result: TerminalCommandResult; reason?: string | null; wasLate?: boolean } }
   | { type: "alert"; data: Alert };
 // Quy ước: PENDING chỉ xuất hiện ở REST 202 + GET /commands, không bao giờ xuất hiện trong WS command_result hay state.lastCommandResult.
@@ -166,7 +167,7 @@ Gửi lệnh MANUAL. Body:
 ```
 Backend sinh `commandId` (`cmd-<uuid ngắn>`), ghi `command_logs` `PENDING` (`requestedAt` = giờ nhận REST), publish MQTT `greenhouse/01/command` `{ commandId, device, on }` (QoS 1, retain false).
 Trả về `202`: `{ "commandId": "cmd-a1b2", "status": "PENDING" }`.
-ESP32 chỉ thực thi khi đang `MANUAL` + qua kiểm tra an toàn, phản hồi qua topic `state`. Backend cập nhật `APPLIED/REJECTED` (`completedAt` = giờ nhận phản hồi). Nếu `COMMAND_TIMEOUT_S` (mặc định 5s) không phản hồi Backend tự đánh `TIMEOUT` (`completedAt` = giờ timeout, Backend-side, không thuộc MQTT spec) và push WS một lần.
+ESP32 chỉ thực thi khi đang `MANUAL` + qua kiểm tra an toàn, phản hồi qua topic `state`. Backend cập nhật `APPLIED/REJECTED` (`completedAt` = giờ nhận phản hồi). Nếu `COMMAND_TIMEOUT_S` (mặc định 5s) không phản hồi Backend tự đánh `TIMEOUT` (`completedAt` = giờ timeout, Backend-side, không thuộc MQTT spec) và **push WebSocket `command_result` với `result: "TIMEOUT"`, `reason: "TIMEOUT"`** (Dashboard nhận được ngay, không cần polling).
 **Late response (sau TIMEOUT):** phản hồi thiết bị đến muộn luôn được chấp nhận (last-write-wins theo `completedAt`): ghi đè `TIMEOUT` thành `APPLIED/REJECTED` thực tế, push thêm một WS `command_result` kèm `wasLate: true`, đồng thời cập nhật `device_state.lastCommand*` theo phản hồi mới nhất. Trùng lặp QoS 1 (cùng `commandId` + cùng kết quả) là no-op, không push WS thừa. Dashboard key theo `commandId`, hiển thị kết quả cuối, hiện ghi chú "phản hồi trễ" khi `wasLate`, không tự gửi lại lệnh chỉ vì `TIMEOUT` (gửi lại = `commandId` mới). `COMMAND_TIMEOUT_S` cấu hình được qua env.
 
 ### 3.6 `GET /api/commands?deviceId=&limit=50`
@@ -191,6 +192,13 @@ Lịch sử + hiện tại cảnh báo (`NO_WATER`, `SENSOR_FAULT`, `OFFLINE`). 
 { "type": "command_result", "data": { "commandId": "cmd-a1b2", "result": "APPLIED", "wasLate": false } }
 ```
 Quy tắc: mất WS fallback polling `GET /latest` + `GET /state` mỗi 5s; nối lại thì tải latest state + `GET /alerts?active=true` trước khi nhận realtime. Backend push `state` khi nhận MQTT `state/status`, push `telemetry` khi nhận MQTT `telemetry` (~5s).
+
+### Heartbeat (v0.2.4)
+
+- **Server chủ động ping:** mỗi 20 giây Backend gửi `{"type": "ping"}` qua WebSocket. Dashboard có thể bỏ qua message này, chỉ cần **bỏ qua mọi `type` lạ** để không vỡ.
+- **Dashboard không cần gửi gì:** socket **không** bị đóng chỉ vì Dashboard im lặng. Trình duyệt không gửi được WebSocket ping frame từ JavaScript nên contract không yêu cầu client ping.
+- Dashboard gửi text bất kỳ cũng được (Backend chỉ log, không xử lý).
+- Socket chết được phát hiện khi Backend gửi thất bại, khi đó Backend dọn socket và Dashboard cần tự reconnect.
 
 ---
 
@@ -233,3 +241,4 @@ Idempotency: MQTT QoS 1 có thể trùng, ESP32 de-dupe theo `commandId`. `comma
 - v0.2.1 (làm rõ sau commit `076adf3` của tv3, không đổi MQTT payload): 1. bucket trả `TelemetryBucket` riêng (có `sampleCount`, không dùng `Telemetry.id`), căn bucket UTC epoch, lọc `[from, to)`; 2. late response sau `TIMEOUT` luôn ghi đè thành `APPLIED/REJECTED` + push WS kèm `wasLate: true` (last-write-wins, trùng QoS 1 là no-op, `COMMAND_TIMEOUT_S` cấu hình được); 3. `command_result.result` thu hẹp `TerminalCommandResult` (không nhận `PENDING`).
 - v0.2.2 (chỉnh theo tv3): 1. bỏ `telemetry_bucket` khỏi `WsMessage`, thêm type REST `TelemetryHistoryResponse`; 2. ví dụ JSON mục 3.2 có envelope `{bucket, data}` cho cả `raw` và bucket; 3. tham chiếu `SCHEMA.md` v0.2.
 - v0.2.3 (Backend đã triển khai, không đổi tên trường/topic): 1. `limit` lấy N mới nhất, `order` chỉ đảo thứ tự trả về; 2. vượt `MAX_SCAN_ROWS` trả 400 thay vì cắt bớt; 3. giá trị cảm biến ngoài dải vật lý → `null` kèm log; 4. `mode` trong body không phân biệt hoa thường.
+- v0.2.4 (sau review tv3): 1. `TIMEOUT` push WebSocket `command_result` (`result: "TIMEOUT"`, `reason: "TIMEOUT"`); 2. heartbeat: server ping mỗi 20s (`{"type":"ping"}`), socket không bị đóng vì Dashboard im lặng, Dashboard không cần gửi ping; 3. `app/models.py` có CheckConstraint cho `humidity_pct` (0–100) và `light_lux` (≥ 0) để Alembic sinh migration đúng `SCHEMA.md` §3; 4. `psycopg[binary]` có trong `requirements.txt` cho đường PostgreSQL.

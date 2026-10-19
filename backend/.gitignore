@@ -20,10 +20,3 @@ certs/
 .coverage
 htmlcov/
 *.log
-
-# Local verification only - not part of the deliverable.
-# These pytest suites and check scripts are kept on the developer's machine to
-# verify the Backend against docs/api-contract.md before opening a Pull Request.
-tests/
-scripts/
-pytest.ini

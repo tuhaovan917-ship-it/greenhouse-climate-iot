@@ -8,6 +8,7 @@ paho-mqtt>=2.1
 python-dotenv>=1.0
 aiosqlite>=0.20
 websockets>=13
-# Optional, only when DATABASE_URL points to PostgreSQL:
-# psycopg[binary]>=3.2
+# Driver for the PostgreSQL upgrade path (DATABASE_URL=postgresql+psycopg://...).
+# SQLite stays the default, so this is only needed when Postgres is used.
+psycopg[binary]>=3.2
 # Alembic is owned by Member 3 and lives in database/, not here.

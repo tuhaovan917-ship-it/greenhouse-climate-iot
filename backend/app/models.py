@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Index
+from sqlalchemy import CheckConstraint, Index
 from sqlmodel import Field, SQLModel
 
 # Value sets kept small and explicit (SCHEMA.md sections 5-8).
@@ -82,6 +82,17 @@ class TelemetryReading(SQLModel, table=True):
     __tablename__ = "telemetry_readings"
     __table_args__ = (
         Index("ix_telemetry_device_received", "device_id", "received_at"),
+        # Check constraints from database/SCHEMA.md v0.2 section 3. Alembic
+        # autogenerate picks them up from this metadata, so the initial
+        # migration carries them too.
+        CheckConstraint(
+            "humidity_pct IS NULL OR (humidity_pct >= 0 AND humidity_pct <= 100)",
+            name="ck_telemetry_humidity_range",
+        ),
+        CheckConstraint(
+            "light_lux IS NULL OR light_lux >= 0",
+            name="ck_telemetry_light_non_negative",
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)

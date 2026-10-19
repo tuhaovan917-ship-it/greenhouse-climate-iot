@@ -144,10 +144,13 @@ backend/
 │   ├── ws_manager.py      # Quan ly ket noi WebSocket theo thiet bi
 │   ├── routers/           # health, telemetry, state, commands, config, alerts, ws
 │   └── services/          # ingest, telemetry (bucket), commands, alerts, state
+├── tests/                 # pytest theo tung dieu khoan API contract
+├── scripts/               # bo kiem thuc tich hop (xem muc 6)
 ├── docker-compose.yml     # Mosquitto cho demo
 ├── mosquitto/mosquitto.conf
 ├── demo_esp32_mock.py     # Thiet bi ao cho demo
 ├── requirements.txt
+├── pytest.ini
 ├── .env.example
 └── .env                   # KHONG commit
 ```
@@ -172,6 +175,27 @@ Khong can them thu vien gi - dung Swagger + thiet bi ao:
 
 Mo `http://localhost:8000/docs` de xem va go truc tiep cac request tren.
 
+### Kiem thu tu dong
+
+```bash
+pip install pytest pytest-asyncio httpx
+
+pytest -q                              # 53 test: tuong thong contract + REST + review tv3
+python scripts/e2e_check.py            # REST + WebSocket + ingest
+python scripts/mqtt_check.py           # MQTT that voi broker amqtt
+python scripts/timeout_check.py        # TIMEOUT push WS + late response
+python scripts/mock_demo_check.py      # demo_esp32_mock.py phan hoi dung
+python scripts/ws_probe.py ws://127.0.0.1:8000/ws   # heartbeat voi server dang chay
+```
+
+`tests/test_contract_conformance.py` co mot test cho **tung dieu khoan** cua
+`docs/api-contract.md` v0.2.4 (ten test ghi ro muc C2, C3.2, C3.5...).
+`tests/test_tv3_review_points.py` kiem tra cac diem tv3 yeu cau xac nhan truoc khi
+khoa metadata Alembic.
+
+`scripts/*_check.py` chay broker `amqtt` ngay trong may (chi la dependency dev,
+khong nam trong `requirements.txt`) nen khong can Docker.
+
 ## 7. Vai tro va phan cong
 
 Theo `docs/CONTRIBUTING.md` va `database/README.md`:
@@ -182,6 +206,31 @@ Theo `docs/CONTRIBUTING.md` va `database/README.md`:
 
 `app/models.py` la **single source** cho Alembic metadata, nen doi bang/cot o day
 thi phai bao cao de Nguyen 3 sinh migration tuong ung. Khong sua migration da dung chung.
+
+### Alembic (Nguyen 3)
+
+`database/alembic/env.py` lay metadata tu Backend:
+
+```python
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
+
+from app.models import SQLModel   # noqa: E402
+
+target_metadata = SQLModel.metadata
+```
+
+Sau do (chay trong `database/`):
+
+```bash
+alembic revision --autogenerate -m "create_initial_greenhouse_tables"
+alembic upgrade head
+```
+
+Metadata nay da co san index va `CheckConstraint` (`humidity_pct` 0-100,
+`light_lux` >= 0) theo `SCHEMA.md` §3, nen migration sinh ra se day du.
 
 Luu y: `create_all` chi dung cho test/demo (`AUTO_CREATE_TABLES=1`); database chinh
 luon chay `alembic upgrade head`.
@@ -226,6 +275,13 @@ Khong commit `.env`, database runtime (`*.db`, `*.db-wal`, `*.db-shm`) hay `cert
 - **PENDING chi la REST**: WebSocket `command_result` chi nhan `APPLIED|REJECTED|TIMEOUT`.
 - **`reason` khong bi xoa**: ESP32 publish lai `state` dinh ky va thuong khong kem
   `reason`, nen Backend chi ghi de khi tin moi co `reason` - ly do tu choi duoc giu lai.
+- **Heartbeat do server gui**: moi 20 giay Backend gui `{"type":"ping"}`; socket
+  **khong** bi dong vi Dashboard im lang (trinh duyet khong gui duoc ping frame tu
+  JavaScript). Client chi can bo qua type la.
+- **`TIMEOUT` duoc push WebSocket**: `command_result` voi `result: "TIMEOUT"`,
+  `reason: "TIMEOUT"` - Dashboard biet ngay, khong can polling.
+- **CheckConstraint trong models**: `humidity_pct` 0-100, `light_lux` >= 0
+  (`SCHEMA.md` §3) de Alembic sinh migration co constraint.
 
 ---
 
