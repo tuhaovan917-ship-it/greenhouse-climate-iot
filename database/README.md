@@ -2,7 +2,7 @@
 
 ## 1. Trạng thái tài liệu
 
-- Phiên bản: `0.2-aligned`.
+- Phiên bản: `0.2.4-migration`.
 - Người phụ trách thiết kế schema/migration: Người 3 - Database & Dashboard.
 - Người phụ trách kết nối và truy vấn runtime: Người 2 - Backend & MQTT.
 - Workflow schema/migration đã được Người 2 và Người 3 thống nhất trong API contract v0.2. Các thay đổi schema thực tế vẫn cần hai bên review qua Pull Request.
@@ -95,6 +95,25 @@ add_alert_resolution_fields
 add_telemetry_device_time_index
 ```
 
+### Chạy Alembic
+
+Sau khi `backend/` và `database/` có mặt trong cùng working tree:
+
+```bash
+pip install -r backend/requirements.txt -r database/requirements.txt
+cd database
+alembic -c alembic.ini upgrade head
+```
+
+`alembic/env.py` import trực tiếp `SQLModel.metadata` từ `backend/app/models.py`.
+Khi hai nhánh chưa merge, có thể trỏ tới một checkout Backend chỉ để review/autogenerate:
+
+```bash
+BACKEND_SOURCE_DIR=/path/to/backend alembic -c alembic.ini revision --autogenerate -m "describe_change"
+```
+
+Không dùng `BACKEND_SOURCE_DIR` để trỏ đến source không cùng commit đã được nhóm review.
+
 ## 7. WAL, transaction và tính nhất quán
 
 - SQLite demo bật WAL để giảm xung đột giữa luồng ghi MQTT và các truy vấn đọc từ Dashboard.
@@ -130,3 +149,16 @@ add_telemetry_device_time_index
 - Alert không bị tạo trùng mỗi chu kỳ cảm biến.
 - API lịch sử lọc đúng device/time và trả thứ tự ổn định.
 - Không có `.env`, credential hoặc file database runtime trong Git.
+
+Initial revision: `20261019_01_create_initial_greenhouse_tables.py`, sinh từ
+metadata Backend commit `5f04d1e` và phải được hai thành viên review trước khi merge.
+
+### Kết quả kiểm thử initial revision
+
+Ngày 19/10/2026 đã kiểm tra với Python 3.11:
+
+- SQLite: upgrade từ database rỗng, `alembic check`, kiểm tra 5 bảng/5 index/2
+  CheckConstraint, từ chối humidity ngoài dải và downgrade về base — đạt.
+- PostgreSQL: upgrade từ database rỗng, `alembic check`, kiểm tra schema,
+  CheckConstraint, timestamp có timezone và downgrade về base — đạt.
+- Database PostgreSQL tạm dùng cho kiểm thử đã được xóa sau khi hoàn tất.

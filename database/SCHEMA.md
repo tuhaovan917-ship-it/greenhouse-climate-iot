@@ -1,8 +1,8 @@
-# Database Schema v0.2 - Greenhouse Climate IoT
+# Database Schema v0.2.4 - Greenhouse Climate IoT
 
 ## 1. Trạng thái
 
-Schema này đã được đồng bộ với `docs/api-contract.md` v0.2 tại commit `917f726` của nhánh `feat/backend`. SQLModel table models và mọi Alembic migration sinh từ schema vẫn phải được Người 2 và Người 3 cùng review.
+Schema này đã được đồng bộ với `docs/api-contract.md` v0.2.4 và SQLModel metadata tại Backend commit `5f04d1e` trên nhánh `feat/backend`. SQLModel table models và mọi Alembic migration sinh từ schema vẫn phải được Người 2 và Người 3 cùng review.
 
 Các nguyên tắc:
 
@@ -99,7 +99,7 @@ Quy tắc:
 - Backend ghi `PENDING` trước khi publish MQTT.
 - Chỉ state/command result thực tế mới chuyển sang `APPLIED` hoặc `REJECTED`.
 - Nếu không có phản hồi sau 5 giây, Backend chuyển lệnh sang `TIMEOUT`; đây là trạng thái Backend-side, không thay đổi MQTT spec.
-- Cần Backend làm rõ cách xử lý phản hồi hợp lệ đến sau `TIMEOUT`: giữ timeout hay cập nhật thành kết quả cuối `APPLIED/REJECTED`.
+- Backend push `TIMEOUT` qua WebSocket ngay khi hết hạn. Phản hồi hợp lệ đến muộn ghi đè thành kết quả thực tế `APPLIED/REJECTED`, cập nhật `completed_at` và được Dashboard đánh dấu `wasLate=true`.
 
 ## 6. Bảng `alerts`
 
@@ -153,6 +153,10 @@ Constraint:
 - `humidity_on_pct < humidity_off_pct`.
 - `light_on_lux < light_off_lux`.
 
+V0.1 thực thi ba ràng buộc hysteresis tại Backend trước khi ghi/publish. Metadata
+commit `5f04d1e` chưa khai báo chúng thành DB `CheckConstraint`; Alembic không tự
+thêm constraint ngoài single-source metadata.
+
 Quy tắc v0.2:
 
 - Firmware hiện chưa có `configId` hoặc payload phản hồi toàn bộ ngưỡng, nên Backend chưa thể khẳng định config đã được áp dụng.
@@ -197,13 +201,22 @@ Demo đóng alert ngay khi điều kiện hết. Bản hoàn thiện yêu cầu 
 - Lọc `device_id`, `active=true`.
 - Sắp xếp `started_at DESC, id DESC`.
 
-## 10. Chi tiết contract còn cần làm rõ
+## 10. Chi tiết contract đã khóa
 
-1. Bucket tổng hợp không có `id` tự nhiên nhưng API `Telemetry.id` đang bắt buộc. Đề xuất response type riêng `TelemetryBucket` có `sampleCount`.
-2. Cần chốt căn bucket theo UTC và semantics khoảng lọc `[from, to)` để các lần query liên tiếp không trùng dữ liệu.
-3. Cần chốt quy tắc cập nhật command khi phản hồi MQTT đến sau `TIMEOUT`.
+1. Bucket tổng hợp dùng `TelemetryBucket` riêng, không có `id` và có `sampleCount`.
+2. Bucket căn theo UTC epoch; khoảng lọc dùng `[from, to)`.
+3. `limit` luôn lấy N dòng/bucket mới nhất trong khoảng; `order` chỉ đổi thứ tự trả về.
+4. Phản hồi MQTT đến sau `TIMEOUT` ghi đè bằng `APPLIED/REJECTED` thực tế và có `wasLate=true`.
+5. Backend gửi heartbeat WebSocket `{"type":"ping"}` mỗi 20 giây; Dashboard bỏ qua và không gửi ping.
 
 ## 11. Kiểm thử schema/migration
+
+Initial Alembic revision: `20261019_01_create_initial_greenhouse_tables.py`,
+autogenerate từ Backend metadata commit `5f04d1e`.
+
+Revision này đã được kiểm tra upgrade/check/downgrade trên SQLite và PostgreSQL;
+hai constraint `ck_telemetry_humidity_range` và
+`ck_telemetry_light_non_negative` đều từ chối dữ liệu ngoài dải như thiết kế.
 
 1. Chạy migration từ database SQLite rỗng.
 2. Insert telemetry hợp lệ và telemetry có trường `NULL`.
