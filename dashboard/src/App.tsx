@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPendingCommand, mergeCommandResult } from './features/control/commandState'
 import { OverviewPage } from './features/overview/OverviewPage'
 import {
+  mockAlerts,
   mockCommandHistory,
   mockDeviceConfig,
   mockDeviceState,
@@ -99,6 +100,7 @@ export default function App() {
         onSendCommand: handleSendCommand,
         onPublishMode: handlePublishMode,
       }}
+      alerts={mockAlerts}
     />
   )
 }

@@ -32,9 +32,11 @@ import type {
   DeviceState,
   Telemetry,
   TelemetryHistoryByBucket,
+  Alert,
 } from '../../types/api'
 import { formatMeasurement, formatTimestamp } from '../../utils/formatters'
 import { ControlPanel } from '../control/ControlPanel'
+import { AlertsPanel } from '../alerts/AlertsPanel'
 import { TelemetryHistoryPanel } from '../history/TelemetryHistoryPanel'
 
 interface ControlBindings {
@@ -50,13 +52,14 @@ interface OverviewPageProps {
   history: TelemetryHistoryByBucket
   dataSource: 'mock' | 'live'
   control?: ControlBindings
+  alerts?: Alert[]
 }
 
 const navigationItems = [
   { label: 'Tổng quan', icon: LayoutDashboard, href: '#overview', active: true },
   { label: 'Lịch sử', icon: ChartNoAxesCombined, href: '#history', active: false },
   { label: 'Điều khiển', icon: SlidersHorizontal, href: '#control', active: false },
-  { label: 'Cảnh báo', icon: BellRing, href: undefined, active: false },
+  { label: 'Cảnh báo', icon: BellRing, href: '#alerts', active: false },
 ]
 
 function getWaterStatus(waterOk: boolean | null) {
@@ -89,6 +92,7 @@ export function OverviewPage({
   history,
   dataSource,
   control,
+  alerts,
 }: OverviewPageProps) {
   const waterStatus = getWaterStatus(telemetry.waterOk)
   const temperature = formatMeasurement(telemetry.temperatureC)
@@ -403,6 +407,8 @@ export function OverviewPage({
               telemetry={telemetry}
             />
           ) : null}
+
+          {alerts ? <AlertsPanel alerts={alerts} /> : null}
         </main>
       </div>
     </div>

@@ -26,8 +26,10 @@ Các milestone Overview, biểu đồ lịch sử và control flow đã có:
 - Luồng lệnh theo `commandId`: `PENDING → APPLIED|REJECTED|TIMEOUT`, hiển thị lý do và phản hồi trễ.
 - Không optimistic update actuator, không tự gửi lại sau timeout và chống xử lý thừa message QoS 1 trùng kết quả.
 - Khóa bơm khi `waterOk=false|null`; `POST /config` chỉ hiển thị `PUBLISHED` và tiếp tục chờ mode thực tế từ ESP32.
+- Khu vực cảnh báo tách rõ cảnh báo đang hoạt động và lịch sử đã xử lý, hiển thị severity, code và thời gian.
+- Empty state khi hệ thống an toàn; cấu trúc sẵn sàng khôi phục lịch sử từ `GET /api/alerts` sau reload/reconnect.
 
-Phần chọn khoảng `from/to`, cảnh báo và tích hợp Backend thật thuộc các milestone tiếp theo.
+Phần chọn khoảng `from/to` và tích hợp Backend thật thuộc các milestone tiếp theo.
 
 ## 2. Phạm vi Dashboard v0.1
 

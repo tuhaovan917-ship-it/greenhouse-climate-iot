@@ -1,5 +1,6 @@
 import type {
   AggregateBucket,
+  Alert,
   CommandActivity,
   DeviceConfig,
   DeviceState,
@@ -85,6 +86,31 @@ export const mockCommandHistory: CommandActivity[] = [
     reason: 'NO_WATER',
     requestedAt: '2026-10-17T02:35:00Z',
     completedAt: '2026-10-17T02:35:01Z',
+  },
+]
+
+export const mockAlerts: Alert[] = [
+  {
+    id: 24,
+    deviceId: 'greenhouse-01',
+    code: 'NO_WATER',
+    severity: 'CRITICAL',
+    message: 'Nguồn nước đã cạn, bơm phun sương được khóa bởi failsafe.',
+    active: false,
+    startedAt: '2026-10-16T08:25:00Z',
+    lastSeenAt: '2026-10-16T08:31:00Z',
+    resolvedAt: '2026-10-16T08:32:00Z',
+  },
+  {
+    id: 17,
+    deviceId: 'greenhouse-01',
+    code: 'OFFLINE',
+    severity: 'CRITICAL',
+    message: 'Không nhận được bản tin hợp lệ từ thiết bị trong 15 giây.',
+    active: false,
+    startedAt: '2026-10-15T03:10:00Z',
+    lastSeenAt: '2026-10-15T03:12:00Z',
+    resolvedAt: '2026-10-15T03:12:05Z',
   },
 ]
 
