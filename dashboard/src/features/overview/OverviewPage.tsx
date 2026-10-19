@@ -23,21 +23,39 @@ import { ActuatorCard } from '../../components/ActuatorCard'
 import { SensorCard } from '../../components/SensorCard'
 import { StatusBadge } from '../../components/StatusBadge'
 import { ThemeToggle } from '../../components/ThemeToggle'
-import type { DeviceState, Telemetry, TelemetryHistoryByBucket } from '../../types/api'
+import type {
+  CommandActivity,
+  CommandRequest,
+  ConfigPublished,
+  ControlMode,
+  DeviceConfig,
+  DeviceState,
+  Telemetry,
+  TelemetryHistoryByBucket,
+} from '../../types/api'
 import { formatMeasurement, formatTimestamp } from '../../utils/formatters'
+import { ControlPanel } from '../control/ControlPanel'
 import { TelemetryHistoryPanel } from '../history/TelemetryHistoryPanel'
+
+interface ControlBindings {
+  config: DeviceConfig
+  commands: CommandActivity[]
+  onSendCommand: (request: CommandRequest) => Promise<void>
+  onPublishMode: (mode: ControlMode) => Promise<ConfigPublished>
+}
 
 interface OverviewPageProps {
   telemetry: Telemetry
   deviceState: DeviceState
   history: TelemetryHistoryByBucket
   dataSource: 'mock' | 'live'
+  control?: ControlBindings
 }
 
 const navigationItems = [
   { label: 'Tổng quan', icon: LayoutDashboard, href: '#overview', active: true },
   { label: 'Lịch sử', icon: ChartNoAxesCombined, href: '#history', active: false },
-  { label: 'Điều khiển', icon: SlidersHorizontal, href: undefined, active: false },
+  { label: 'Điều khiển', icon: SlidersHorizontal, href: '#control', active: false },
   { label: 'Cảnh báo', icon: BellRing, href: undefined, active: false },
 ]
 
@@ -70,6 +88,7 @@ export function OverviewPage({
   deviceState,
   history,
   dataSource,
+  control,
 }: OverviewPageProps) {
   const waterStatus = getWaterStatus(telemetry.waterOk)
   const temperature = formatMeasurement(telemetry.temperatureC)
@@ -373,6 +392,17 @@ export function OverviewPage({
               </dl>
             </article>
           </section>
+
+          {control ? (
+            <ControlPanel
+              commands={control.commands}
+              config={control.config}
+              deviceState={deviceState}
+              onPublishMode={control.onPublishMode}
+              onSendCommand={control.onSendCommand}
+              telemetry={telemetry}
+            />
+          ) : null}
         </main>
       </div>
     </div>

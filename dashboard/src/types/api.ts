@@ -75,6 +75,30 @@ export interface CommandLog {
   completedAt: string | null
 }
 
+export interface CommandRequest {
+  deviceId: string
+  device: DeviceName
+  on: boolean
+}
+
+export interface CommandAccepted {
+  commandId: string
+  status: 'PENDING'
+}
+
+export interface CommandLogList {
+  data: CommandLog[]
+}
+
+export interface CommandActivity extends CommandLog {
+  wasLate?: boolean
+}
+
+export interface ConfigPublished {
+  status: 'PUBLISHED'
+  config: DeviceConfig
+}
+
 export interface Alert {
   id: number
   deviceId: string
@@ -85,6 +109,10 @@ export interface Alert {
   startedAt: string
   lastSeenAt: string
   resolvedAt: string | null
+}
+
+export interface AlertList {
+  data: Alert[]
 }
 
 export interface CommandResultData {

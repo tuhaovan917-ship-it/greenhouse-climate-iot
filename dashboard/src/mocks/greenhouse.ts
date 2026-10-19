@@ -1,10 +1,22 @@
 import type {
   AggregateBucket,
+  CommandActivity,
+  DeviceConfig,
   DeviceState,
   Telemetry,
   TelemetryBucket,
   TelemetryHistoryByBucket,
 } from '../types/api'
+
+export const mockDeviceConfig: DeviceConfig = {
+  mode: 'AUTO',
+  tempOnC: 30,
+  tempOffC: 28,
+  humidityOnPct: 55,
+  humidityOffPct: 65,
+  lightOnLux: 300,
+  lightOffLux: 700,
+}
 
 export const mockTelemetry: Telemetry = {
   id: 1248,
@@ -51,6 +63,30 @@ export const mockOfflineState: DeviceState = {
   lastSeenAt: '2026-10-17T02:36:11Z',
   updatedAt: '2026-10-17T02:36:26Z',
 }
+
+export const mockCommandHistory: CommandActivity[] = [
+  {
+    commandId: 'cmd-demo-late',
+    deviceId: 'greenhouse-01',
+    device: 'fan',
+    requestedOn: true,
+    status: 'APPLIED',
+    reason: null,
+    requestedAt: '2026-10-17T02:40:00Z',
+    completedAt: '2026-10-17T02:40:07Z',
+    wasLate: true,
+  },
+  {
+    commandId: 'cmd-demo-rejected',
+    deviceId: 'greenhouse-01',
+    device: 'mist',
+    requestedOn: true,
+    status: 'REJECTED',
+    reason: 'NO_WATER',
+    requestedAt: '2026-10-17T02:35:00Z',
+    completedAt: '2026-10-17T02:35:01Z',
+  },
+]
 
 const historyEndMs = Date.parse('2026-10-19T09:00:00Z')
 const historyPointCount = 24

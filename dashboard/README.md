@@ -10,7 +10,7 @@
 
 ### Trạng thái triển khai
 
-Milestone 1 và phần biểu đồ của milestone 2 đã có:
+Các milestone Overview, biểu đồ lịch sử và control flow đã có:
 
 - Scaffold React + Vite + TypeScript và giao diện sáng/tối bằng Tailwind CSS.
 - TypeScript types cho REST/WebSocket, bao gồm response union riêng cho telemetry raw/bucket.
@@ -22,8 +22,12 @@ Milestone 1 và phần biểu đồ của milestone 2 đã có:
 - Empty state cho bucket chưa có dữ liệu và mock history theo đúng envelope `{ bucket, data }`.
 - Unit test cho dữ liệu hợp lệ, trường `null`, `waterOk=false`, `waterOk=null` và offline.
 - Unit test cho bucket mặc định, chuyển sang raw, ba biểu đồ và empty state.
+- Khu vực điều khiển từ xa chỉ mở khi trạng thái thực tế là `MANUAL` và thiết bị online.
+- Luồng lệnh theo `commandId`: `PENDING → APPLIED|REJECTED|TIMEOUT`, hiển thị lý do và phản hồi trễ.
+- Không optimistic update actuator, không tự gửi lại sau timeout và chống xử lý thừa message QoS 1 trùng kết quả.
+- Khóa bơm khi `waterOk=false|null`; `POST /config` chỉ hiển thị `PUBLISHED` và tiếp tục chờ mode thực tế từ ESP32.
 
-Phần chọn khoảng `from/to`, điều khiển, cảnh báo và tích hợp Backend thật thuộc các milestone tiếp theo.
+Phần chọn khoảng `from/to`, cảnh báo và tích hợp Backend thật thuộc các milestone tiếp theo.
 
 ## 2. Phạm vi Dashboard v0.1
 
