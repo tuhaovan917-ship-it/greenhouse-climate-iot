@@ -53,6 +53,7 @@ interface OverviewPageProps {
   dataSource: 'mock' | 'live'
   control?: ControlBindings
   alerts?: Alert[]
+  realtimeStatus?: 'connecting' | 'connected' | 'polling'
 }
 
 const navigationItems = [
@@ -93,6 +94,7 @@ export function OverviewPage({
   dataSource,
   control,
   alerts,
+  realtimeStatus,
 }: OverviewPageProps) {
   const waterStatus = getWaterStatus(telemetry.waterOk)
   const temperature = formatMeasurement(telemetry.temperatureC)
@@ -189,6 +191,17 @@ export function OverviewPage({
               <ThemeToggle />
               {dataSource === 'mock' ? (
                 <StatusBadge tone="warning">Dữ liệu mô phỏng</StatusBadge>
+              ) : realtimeStatus ? (
+                <StatusBadge
+                  tone={realtimeStatus === 'connected' ? 'positive' : realtimeStatus === 'polling' ? 'warning' : 'neutral'}
+                  showDot
+                >
+                  {realtimeStatus === 'connected'
+                    ? 'Realtime'
+                    : realtimeStatus === 'polling'
+                      ? 'Polling mỗi 5 giây'
+                      : 'Đang kết nối WS'}
+                </StatusBadge>
               ) : null}
               <StatusBadge
                 tone={deviceState.online ? 'positive' : 'critical'}

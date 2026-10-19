@@ -28,8 +28,11 @@ Các milestone Overview, biểu đồ lịch sử và control flow đã có:
 - Khóa bơm khi `waterOk=false|null`; `POST /config` chỉ hiển thị `PUBLISHED` và tiếp tục chờ mode thực tế từ ESP32.
 - Khu vực cảnh báo tách rõ cảnh báo đang hoạt động và lịch sử đã xử lý, hiển thị severity, code và thời gian.
 - Empty state khi hệ thống an toàn; cấu trúc sẵn sàng khôi phục lịch sử từ `GET /api/alerts` sau reload/reconnect.
+- REST client đã tích hợp telemetry/state/history/config/commands/alerts theo contract Backend v0.2.3.
+- Một WebSocket duy nhất nhận telemetry/state/command_result/alert, có ping keepalive, tự reconnect và fallback polling 5 giây.
+- Khi reconnect, Dashboard tải lại latest telemetry, state và lịch sử cảnh báo; biểu đồ được đồng bộ lại định kỳ.
 
-Phần chọn khoảng `from/to` và tích hợp Backend thật thuộc các milestone tiếp theo.
+Phần chọn khoảng `from/to` thuộc milestone tiếp theo.
 
 ## 2. Phạm vi Dashboard v0.1
 
@@ -154,9 +157,13 @@ UI dùng Tailwind CSS; biểu đồ lịch sử dùng Recharts.
 ```env
 VITE_API_BASE_URL=http://localhost:8000
 VITE_WS_URL=ws://localhost:8000/ws
+VITE_DEVICE_ID=greenhouse-01
+VITE_DATA_SOURCE=mock
 # Chỉ đặt khi Backend chạy trên LAN và bật API key
 VITE_API_KEY=
 ```
+
+Đặt `VITE_DATA_SOURCE=live` để kết nối Backend thật. Giữ `mock` để chạy và review giao diện độc lập.
 
 Chỉ commit `.env.example`. Không commit `.env` hoặc thông tin bí mật.
 
