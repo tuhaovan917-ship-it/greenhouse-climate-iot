@@ -28,12 +28,15 @@ from app.config import Settings, settings
 
 logger = logging.getLogger(__name__)
 
+# Greenhouse code 01 -> topic prefix from docs/mqtt-protocol.md v0.1.
+TOPIC_PREFIX = "greenhouse/01"
+
 
 class MqttService:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._mqtt = settings.mqtt
-        self._prefix = f"greenhouse/01"
+        self._prefix = TOPIC_PREFIX
         self._client: mqtt.Client | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._connected = threading.Event()

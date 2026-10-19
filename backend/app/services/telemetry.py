@@ -25,6 +25,15 @@ class ScanTooLargeError(ValueError):
     """Raised when a history query would exceed MAX_SCAN_ROWS."""
 
 
+# Contract 2: physical ranges. A reading outside them is a sensor fault, not a
+# value, so ingest stores NULL and the SENSOR_FAULT alert can fire.
+SENSOR_RANGES: dict[str, tuple[float | None, float | None]] = {
+    "temperatureC": (-40.0, 125.0),
+    "humidityPct": (0.0, 100.0),
+    "lightLux": (0.0, None),
+}
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -82,31 +91,51 @@ class TelemetryService:
         desc: bool,
         bucket: str,
     ) -> TelemetryHistoryResponse:
-        # Contract 3.2: filter range is [from, to).
+        """Contract 3.2.
+
+        `limit` always keeps the NEWEST rows inside [from, to); `order` only
+        decides how those rows are returned. Taking the newest window first
+        means `order=asc&limit=N` still shows the latest N samples sorted for a
+        chart instead of the oldest N in the range.
+        """
         statement = select(TelemetryReading).where(TelemetryReading.device_id == deviceId)
         if start is not None:
             statement = statement.where(TelemetryReading.received_at >= start)
         if end is not None:
             statement = statement.where(TelemetryReading.received_at < end)
+        # Stable order: received_at first, id as the tie-breaker (SCHEMA.md 3).
         statement = statement.order_by(
-            TelemetryReading.received_at.desc() if desc else TelemetryReading.received_at.asc(),
-            TelemetryReading.id.desc() if desc else TelemetryReading.id.asc(),
+            TelemetryReading.received_at.desc(), TelemetryReading.id.desc()
         )
         statement = statement.limit(settings.max_scan_rows)
 
         rows = list(session.exec(statement).all())
+        if len(rows) >= settings.max_scan_rows:
+            # Returning a silently truncated window would draw a wrong chart.
+            raise ScanTooLargeError(
+                f"Khoang thoi gian qua rong ({settings.max_scan_rows} dong). "
+                "Hay thu lai voi from/to hep hon hoac dung bucket lon hon (1m, 5m, 1h)."
+            )
+
         if bucket == "raw":
+            window = rows[:limit]
+            if not desc:
+                window = list(reversed(window))
             return TelemetryHistoryResponse(
                 bucket="raw",
-                data=[TelemetryOut.model_validate(row) for row in rows[:limit]],
+                data=[TelemetryOut.model_validate(row) for row in window],
             )
-        return TelemetryHistoryResponse(bucket=bucket, data=self._aggregate(rows, bucket, limit))
+        return TelemetryHistoryResponse(bucket=bucket, data=self._aggregate(rows, bucket, limit, desc))
 
     @staticmethod
     def _aggregate(
-        rows: list[TelemetryReading], bucket: str, limit: int
+        rows: list[TelemetryReading], bucket: str, limit: int, desc: bool = True
     ) -> list[TelemetryBucket]:
-        """Average numerics, keep the last non-null waterOk per bucket."""
+        """Average numerics, keep the last non-null waterOk per bucket.
+
+        Buckets are selected newest-first and only then sorted for output, so
+        `limit` always keeps the most recent N buckets (contract 3.2).
+        """
         sizeSeconds = BUCKET_SECONDS[bucket]
         grouped: dict[datetime, list[TelemetryReading]] = {}
         for row in rows:
@@ -130,7 +159,10 @@ class TelemetryService:
             )
 
         results.sort(key=lambda item: item.bucket_start, reverse=True)
-        return results[:limit]
+        window = results[:limit]
+        if not desc:
+            window = list(reversed(window))
+        return window
 
     def historyRange(self, start: datetime | None, end: datetime | None) -> timedelta | None:
         if start is None or end is None:

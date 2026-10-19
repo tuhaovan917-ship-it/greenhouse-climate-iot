@@ -1,6 +1,6 @@
 # API Contract — Backend ↔ Dashboard (Greenhouse Climate IoT)
 
-**Version:** 0.2.2 (khóa cùng tv3: TelemetryHistoryResponse cho REST, bỏ bucket khỏi WS, ví dụ envelope `{bucket, data}`)
+**Version:** 0.2.3 (Backend đã triển khai: chốt nghĩa `limit`, lỗi khi quá `MAX_SCAN_ROWS`, giá trị cảm biến ngoài dải thành NULL, `mode` không phân biệt hoa thường)
 **Base URL (dev):** `http://localhost:8000`
 **Docs tự sinh:** `http://localhost:8000/docs` (FastAPI Swagger)
 **Liên quan:** `docs/mqtt-protocol.md` v0.1 trên nhánh `feat/esp32` (topics `greenhouse/01/*`, JSON telemetry/state/command/config); `database/SCHEMA.md` v0.2 trên nhánh `feat/dashboard` (5 bảng, index, dedup alert, severity). File này KHÔNG định nghĩa lại MQTT hay schema DB, chỉ định nghĩa REST/WS cho Dashboard React+Vite+TS.
@@ -29,10 +29,11 @@
 
 - `deviceId` mặc định `greenhouse-01` nhưng schema/API không hard-code 1 thiết bị.
 - Thời gian: string ISO8601 UTC, ví dụ `2026-10-15T10:00:00Z`. Backend sinh lúc nhận MQTT (`receivedAt`), lúc cập nhật state (`updatedAt`, `lastSeenAt`).
-- Số liệu: `temperatureC` (float, °C), `humidityPct` (float 0–100), `lightLux` (float ≥ 0), `waterOk` (`boolean | null`: `true` còn nước, `false` hết nước, `null` cảm biến không đáng tin). Giá trị lỗi từ ESP32 gửi `null`, **không** gửi `NaN`. Chỉ `false` mới báo `NO_WATER`; `null` báo `SENSOR_FAULT` + khóa bơm failsafe.
+- Số liệu: `temperatureC` (float, °C), `humidityPct` (float 0–100), `lightLux` (float ≥ 0), `waterOk` (`boolean | null`: `true` còn nước, `false` hết nước, `null` cảm biến không đáng tin). Giá trị lỗi từ ESP32 gửi `null`, **không** gửi `NaN`. Backend cũng tự chuẩn hoá: giá trị không phải số, là `NaN`/`Infinity` hoặc nằm ngoài dải vật lý (`temperatureC` -40..125, `humidityPct` 0..100, `lightLux` ≥ 0) đều được lưu thành `null` kèm log cảnh báo. Chỉ `false` mới báo `NO_WATER`; `null` báo `SENSOR_FAULT` + khóa bơm failsafe.
 - `mode`: `AUTO` | `MANUAL`. `failsafeActive`: bool, ưu tiên cao nhất, có thể ghi đè cả 2 mode.
 - Thứ tự ổn định: mọi list sắp xếp `receivedAt/startedAt DESC, id DESC` (thêm `id` làm khóa phụ khi timestamp trùng).
 - Lỗi REST thống nhất: `{ "detail": "..." }` kèm HTTP status chuẩn (400 validation, 404 not found). Kết quả lệnh sai mode/hết nước thể hiện ở `command_result` (`REJECTED`), không phải HTTP 500.
+- Body `POST` không phân biệt hoa thường cho `mode` (`"manual"` được chuẩn hoá thành `MANUAL`); sai kiểu hoặc sai giá trị trả 422.
 
 ### TypeScript types (copy sang Dashboard)
 
@@ -134,7 +135,10 @@ export type WsMessage =
 Kiểm tra sống. Trả về `{ "status": "ok", "mqttConnected": true, "db": "ok" }`.
 
 ### 3.2 `GET /api/telemetry?deviceId=greenhouse-01&from=&to=&limit=100&order=desc&bucket=raw|1m|5m|1h`
-Lịch sử vẽ biểu đồ. `from/to` ISO8601 theo semantics **[from, to)** (`from` inclusive, `to` exclusive, vắng `to` = now) để các lần query liên tiếp không trùng dữ liệu. `limit` mặc định 100 max 1000 (đếm theo bucket khi dùng bucket), `order` asc/desc áp dụng cho `receivedAt`/`bucketStart` (khóa phụ `id` cho raw).
+Lịch sử vẽ biểu đồ. `from/to` ISO8601 theo semantics **[from, to)** (`from` inclusive, `to` exclusive, vắng `to` = now) để các lần query liên tiếp không trùng dữ liệu.
+- `limit` mặc định 100, max 1000. **Luôn lấy N dòng/bucket MỚI NHẤT trong khoảng lọc**; `order` chỉ quyết định thứ tự trả về, không đổi tập dữ liệu được lấy. Nhờ vậy `order=asc&limit=N` vẫn trả N mẫu mới nhất đúng thứ tự vẽ biểu đồ, không phải N mẫu cũ nhất trong khoảng.
+- Khi số dòng khớp `from/to` vượt `MAX_SCAN_ROWS` (mặc định 20000, cấu hình qua env), Backend trả **400** kèm gợi ý thu hẹp khoảng thời gian hoặc dùng bucket lớn hơn, **không** cắt bớt dữ liệu âm thầm.
+- `order` áp dụng cho `receivedAt` (raw) hoặc `bucketStart` (bucket), khóa phụ `id` để thứ tự ổn định khi timestamp trùng.
 - `raw`: `data` là `Telemetry[]`.
 - `1m|5m|1h`: `data` là `TelemetryBucket[]`. Bucket căn theo UTC epoch (`1m` tại :00, `5m` tại :00/:05/..., `1h` tại đầu giờ); `bucketStart` là thời điểm bắt đầu bucket; số lấy average bỏ NULL; `waterOk` lấy giá trị khác null cuối bucket (all-null thì null); `sampleCount` đếm mọi bản tin raw trong bucket; bucket trống bỏ qua. V0.1 tổng hợp lúc query, chưa bảng aggregate.
 Envelope luôn là `TelemetryHistoryResponse` (`{ bucket, data }`) cho cả hai trường hợp.
@@ -228,3 +232,4 @@ Idempotency: MQTT QoS 1 có thể trùng, ESP32 de-dupe theo `commandId`. `comma
 - v0.2: thêm `bucket` + quy tắc aggregate; giữ `GET /alerts` + filter `active/code`; `online/lastSeenAt` + timeout 15s + severity; `waterOk nullable`; types `CommandLog/Alert/WsMessage` + `TIMEOUT`; `POST /config` trả `PUBLISHED` (chưa ack); auth API key LAN; workflow Alembic; sửa typo REST + de-dupe.
 - v0.2.1 (làm rõ sau commit `076adf3` của tv3, không đổi MQTT payload): 1. bucket trả `TelemetryBucket` riêng (có `sampleCount`, không dùng `Telemetry.id`), căn bucket UTC epoch, lọc `[from, to)`; 2. late response sau `TIMEOUT` luôn ghi đè thành `APPLIED/REJECTED` + push WS kèm `wasLate: true` (last-write-wins, trùng QoS 1 là no-op, `COMMAND_TIMEOUT_S` cấu hình được); 3. `command_result.result` thu hẹp `TerminalCommandResult` (không nhận `PENDING`).
 - v0.2.2 (chỉnh theo tv3): 1. bỏ `telemetry_bucket` khỏi `WsMessage`, thêm type REST `TelemetryHistoryResponse`; 2. ví dụ JSON mục 3.2 có envelope `{bucket, data}` cho cả `raw` và bucket; 3. tham chiếu `SCHEMA.md` v0.2.
+- v0.2.3 (Backend đã triển khai, không đổi tên trường/topic): 1. `limit` lấy N mới nhất, `order` chỉ đảo thứ tự trả về; 2. vượt `MAX_SCAN_ROWS` trả 400 thay vì cắt bớt; 3. giá trị cảm biến ngoài dải vật lý → `null` kèm log; 4. `mode` trong body không phân biệt hoa thường.

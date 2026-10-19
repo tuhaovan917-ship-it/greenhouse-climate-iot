@@ -9,7 +9,7 @@ from app.config import settings
 from app.database import getSession
 from app.routers.deps import badRequest
 from app.schemas import TelemetryHistoryResponse, TelemetryOut
-from app.services.telemetry import parseQueryTime, telemetryService
+from app.services.telemetry import ScanTooLargeError, parseQueryTime, telemetryService
 
 router = APIRouter(prefix="/api", tags=["telemetry"])
 
@@ -42,15 +42,18 @@ def getTelemetryHistory(
     if start is not None and end is not None and start > end:
         raise badRequest("from phai nho hon to")
 
-    return telemetryService.history(
-        session=session,
-        deviceId=deviceId,
-        start=start,
-        end=end,
-        limit=limit,
-        desc=order == "desc",
-        bucket=bucket,
-    )
+    try:
+        return telemetryService.history(
+            session=session,
+            deviceId=deviceId,
+            start=start,
+            end=end,
+            limit=limit,
+            desc=order == "desc",
+            bucket=bucket,
+        )
+    except ScanTooLargeError as error:
+        raise badRequest(str(error)) from error
 
 
 @router.get(

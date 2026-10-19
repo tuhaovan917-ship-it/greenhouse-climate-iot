@@ -57,8 +57,9 @@ def testHealth(client: TestClient) -> None:
     assert body["db"] == "ok"
 
 
-def testStateBeforeFirstMessage(client: TestClient) -> None:
-    assert client.get("/api/state").status_code == 404
+def testStateForUnknownDevice(client: TestClient) -> None:
+    """Contract 3.4: a device with no state row answers 404, not a fake state."""
+    assert client.get("/api/state", params={"deviceId": "thiet-bi-khong-ton-tai"}).status_code == 404
 
 
 # --- telemetry ingestion + history ---

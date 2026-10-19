@@ -106,10 +106,12 @@ class DeviceConfigOut(CamelModel):
 class DeviceConfigRequest(DeviceConfigOut):
     """POST /api/config body with hysteresis validation (contract 3.7)."""
 
-    @field_validator("mode")
+    @field_validator("mode", mode="before")
     @classmethod
-    def _checkMode(cls, value: str) -> str:
-        return value.upper()
+    def _normaliseMode(cls, value: object) -> object:
+        # Must run BEFORE the Literal check, otherwise "manual" is rejected
+        # instead of being accepted case-insensitively.
+        return value.strip().upper() if isinstance(value, str) else value
 
     def validateThresholds(self) -> None:
         if self.temp_on_c <= self.temp_off_c:

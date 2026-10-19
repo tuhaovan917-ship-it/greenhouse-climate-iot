@@ -34,7 +34,7 @@ from app.schemas import (
 from app.services.alerts import NO_WATER, OFFLINE, SENSOR_FAULT, alertService
 from app.services.commands import commandService
 from app.services.state import stateService, upsertDeviceState
-from app.services.telemetry import telemetryService
+from app.services.telemetry import SENSOR_RANGES, telemetryService
 from app.ws_manager import wsManager
 
 logger = logging.getLogger(__name__)
@@ -47,9 +47,9 @@ async def handleTelemetry(deviceId: str, payload: dict) -> None:
         with sessionScope() as session:
             reading = TelemetryReading(
                 device_id=deviceId,
-                temperature_c=_asOptionalFloat(payload.get("temperatureC")),
-                humidity_pct=_asOptionalFloat(payload.get("humidityPct")),
-                light_lux=_asOptionalFloat(payload.get("lightLux")),
+                temperature_c=_asOptionalFloat(payload.get("temperatureC"), "temperatureC", deviceId),
+                humidity_pct=_asOptionalFloat(payload.get("humidityPct"), "humidityPct", deviceId),
+                light_lux=_asOptionalFloat(payload.get("lightLux"), "lightLux", deviceId),
                 water_ok=_asOptionalBool(payload.get("waterOk")),
                 received_at=utcNow(),
             )
@@ -122,11 +122,11 @@ async def handleState(deviceId: str, payload: dict) -> None:
             state = upsertDeviceState(session, deviceId, values)
 
             if commandId and result in (COMMAND_APPLIED, COMMAND_REJECTED):
-                log, wasLate = commandService.applyResult(
+                outcome = commandService.applyResult(
                     session, str(commandId), str(result), reason
                 )
-                if log is not None:
-                    applied.append((str(commandId), wasLate, str(result), reason))
+                if outcome.changed and outcome.log is not None:
+                    applied.append((str(commandId), outcome.wasLate, str(result), reason))
 
             alerts = _evaluateStateAlerts(session, deviceId, state)
             session.flush()
@@ -245,15 +245,28 @@ def _evaluateStateAlerts(session, deviceId: str, state: DeviceState) -> list[Ale
     return []
 
 
-def _asOptionalFloat(value: object) -> float | None:
+def _asOptionalFloat(value: object, field: str = "", deviceId: str = "") -> float | None:
+    """Parse one sensor value, returning None when it is unusable.
+
+    A missing value, a non-number, NaN/Infinity or a value outside the physical
+    range all become NULL, which is what the contract expects for a failed read.
+    """
     if value is None or isinstance(value, bool):
         return None
     try:
         number = float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
+        logger.warning("non-numeric %s from %s: %r", field, deviceId, value)
         return None
+
     # JSON must never carry NaN or Infinity (mqtt-protocol v0.1 section 3.1).
     if number != number or number in (float("inf"), float("-inf")):
+        logger.warning("NaN/Inf %s from %s", field, deviceId)
+        return None
+
+    low, high = SENSOR_RANGES.get(field, (None, None))
+    if (low is not None and number < low) or (high is not None and number > high):
+        logger.warning("out-of-range %s from %s: %s", field, deviceId, number)
         return None
     return number
 

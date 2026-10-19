@@ -7,7 +7,7 @@ from fastapi import Header, HTTPException, status
 from app.config import settings
 
 
-def requireApiKey(xApiKey: str | None = Header(default=None)) -> None:
+def requireApiKey(xApiKey: str | None = Header(default=None, alias="X-API-Key")) -> None:
     """Protect write endpoints when the Backend is exposed to the LAN.
 
     Contract section 5: localhost demo leaves API_KEY empty and this check

@@ -14,7 +14,7 @@ import asyncio
 import concurrent.futures
 import logging
 import uuid
-from datetime import datetime, timedelta
+from dataclasses import dataclass
 
 from sqlmodel import Session, select
 
@@ -30,6 +30,19 @@ from app.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class CommandApplyResult:
+    """Outcome of applying a device reply to a command row.
+
+    `changed` is False for a duplicate QoS 1 delivery, which must not trigger an
+    extra WebSocket push (contract 3.5).
+    """
+
+    log: CommandLog | None
+    changed: bool = False
+    wasLate: bool = False
 
 
 def newCommandId() -> str:
@@ -110,19 +123,20 @@ class CommandService:
         commandId: str,
         result: str,
         reason: str | None,
-    ) -> tuple[CommandLog | None, bool]:
-        """Apply a device reply. Returns (log, wasLate).
+    ) -> CommandApplyResult:
+        """Apply a device reply.
 
         A reply arriving after TIMEOUT still updates the row and reports
-        `wasLate=True` so the Dashboard can show the real final result.
+        `wasLate=True` so the Dashboard can show the real final result. A repeat
+        of the same final result is a duplicate QoS 1 delivery: `changed=False`.
         """
         log = self.get(session, commandId)
         if log is None:
             logger.warning("reply for unknown command %s", commandId)
-            return None, False
+            return CommandApplyResult(log=None)
+
         if log.status in (COMMAND_APPLIED, COMMAND_REJECTED) and log.reason == reason:
-            # Duplicate QoS 1 delivery - nothing changed, no extra WS push.
-            return log, False
+            return CommandApplyResult(log=log, changed=False)
 
         wasLate = log.status == COMMAND_TIMEOUT
         log.status = result
@@ -130,7 +144,7 @@ class CommandService:
         log.completed_at = utcNow()
         if wasLate:
             logger.info("late reply accepted for %s -> %s", commandId, result)
-        return log, wasLate
+        return CommandApplyResult(log=log, changed=True, wasLate=wasLate)
 
     # --- queries ---
 

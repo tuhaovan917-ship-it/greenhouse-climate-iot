@@ -161,12 +161,16 @@ backend/
 ```bash
 pip install pytest pytest-asyncio httpx
 
-pytest -q                              # 11 test REST/contract
+pytest -q                              # 45 test: 34 tuong thong contract + 11 test REST
 python scripts/e2e_check.py            # REST + WebSocket + ingest
 python scripts/mqtt_check.py           # MQTT that voi broker amqtt
 python scripts/timeout_check.py        # TIMEOUT + late response + wasLate
 python scripts/mock_demo_check.py      # demo_esp32_mock.py phan hoi dung
 ```
+
+`tests/test_contract_conformance.py` viết một test cho **từng điều khoản** của
+`docs/api-contract.md` v0.2.3, tên test ghi rõ mục (C2, C3.2, C3.5...) để khi fail
+biết ngay điều khoản nào chưa đạt.
 
 `scripts/*_check.py` chay broker `amqtt` ngay trong may (chi la dependency dev,
 khong nam trong `requirements.txt`) nen khong can Docker.
@@ -175,7 +179,7 @@ Da xac nhan chay xanh:
 
 | Bo kiem thu | Phu | Kiem tra |
 |---|---|---|
-| `pytest` | 11 | envelope `{bucket,data}`, alert dedup, hysteresis, API key |
+| `pytest` | 45 | tung dieu khoan contract: `[from,to)`, `limit` lay N moi nhat, can bucket UTC, average bo NULL, `sampleCount`, gioi `limit`, alert dedup/severity, hysteresis, API key, phan biet thiet bi |
 | `e2e_check` | 19 | cam bien -> DB -> WS, FAILSAFE -> `NO_WATER`, resolve khi bom nuoc |
 | `mqtt_check` | 20 | telemetry/state/status that, lenh -> `APPLIED`, QoS 1 trung lap, config camelCase |
 | `timeout_check` | 13 | `PENDING -> TIMEOUT`, late reply `wasLate=true`, WS khong bao gio `PENDING` |
@@ -213,7 +217,7 @@ luon chay `alembic upgrade head`.
 | `COMMAND_TIMEOUT_S` | `5` | Khong phan hoi -> `TIMEOUT` |
 | `DEVICE_TIMEOUT_S` | `15` | Khong co tin nhan -> `online=false` |
 | `DATABASE_URL` | `sqlite:///./greenhouse.db` | SQLite hoac PostgreSQL |
-| `MAX_SCAN_ROWS` | `20000` | Gioi han so dong raw khi tong hop bucket |
+| `MAX_SCAN_ROWS` | `20000` | Vuot qua -> `GET /api/telemetry` tra 400 thay vi cat bom |
 | `AUTO_CREATE_TABLES` | `0` | Chi dev/demo, thay cho Alembic |
 | `LOG_LEVEL` | `INFO` | `DEBUG` de in tung tin nhan MQTT nhan duoc |
 
@@ -232,6 +236,8 @@ Khong commit `.env`, database runtime (`*.db`, `*.db-wal`, `*.db-shm`) hay `cert
   len loop, khong duoc goi coroutine truc tiep.
 - **Bucket**: tong hop bang Python de chay giong nhau tren SQLite va PostgreSQL
   (`strftime` vs `date_trunc` la khac nhau); can bucket theo UTC epoch.
+- **`limit` luon lay phan moi nhat**: `order` chi quyet dinh thu tu tra ve, nen `order=asc`
+  van ve duoc N mau moi nhat dung thu tu khong phai N mau cuoi cung trong khoang.
 - **PENDING chi la REST**: WebSocket `command_result` chi nhan `APPLIED|REJECTED|TIMEOUT`.
 
 ---

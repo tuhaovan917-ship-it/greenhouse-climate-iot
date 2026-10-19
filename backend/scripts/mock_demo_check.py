@@ -38,8 +38,7 @@ os.environ["COMMAND_TIMEOUT_S"] = "3"
 os.environ["DEVICE_TIMEOUT_S"] = "15"
 os.environ["AUTO_CREATE_TABLES"] = "1"
 
-import amqtt  # noqa: E402,F401  (dev-only broker for this check)
-from amqtt.broker import Broker  # noqa: E402
+from amqtt.broker import Broker  # noqa: E402  (dev-only broker for this check)
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.database import createTablesForTest  # noqa: E402
