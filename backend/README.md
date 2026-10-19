@@ -144,8 +144,6 @@ backend/
 │   ├── ws_manager.py      # Quan ly ket noi WebSocket theo thiet bi
 │   ├── routers/           # health, telemetry, state, commands, config, alerts, ws
 │   └── services/          # ingest, telemetry (bucket), commands, alerts, state
-├── tests/                 # Pytest theo API contract
-├── scripts/               # Bo kiem thuc tich hop (xem muc 6)
 ├── docker-compose.yml     # Mosquitto cho demo
 ├── mosquitto/mosquitto.conf
 ├── demo_esp32_mock.py     # Thiet bi ao cho demo
@@ -156,36 +154,23 @@ backend/
 
 ---
 
-## 6. Kiem thu
+## 6. Tu kiem tra truoc khi demo
 
-```bash
-pip install pytest pytest-asyncio httpx
+Khong can them thu vien gi - dung Swagger + thiet bi ao:
 
-pytest -q                              # 45 test: 34 tuong thong contract + 11 test REST
-python scripts/e2e_check.py            # REST + WebSocket + ingest
-python scripts/mqtt_check.py           # MQTT that voi broker amqtt
-python scripts/timeout_check.py        # TIMEOUT + late response + wasLate
-python scripts/mock_demo_check.py      # demo_esp32_mock.py phan hoi dung
-```
-
-`tests/test_contract_conformance.py` viết một test cho **từng điều khoản** của
-`docs/api-contract.md` v0.2.3, tên test ghi rõ mục (C2, C3.2, C3.5...) để khi fail
-biết ngay điều khoản nào chưa đạt.
-
-`scripts/*_check.py` chay broker `amqtt` ngay trong may (chi la dependency dev,
-khong nam trong `requirements.txt`) nen khong can Docker.
-
-Da xac nhan chay xanh:
-
-| Bo kiem thu | Phu | Kiem tra |
+| Buoc | Cach | Mong doi |
 |---|---|---|
-| `pytest` | 45 | tung dieu khoan contract: `[from,to)`, `limit` lay N moi nhat, can bucket UTC, average bo NULL, `sampleCount`, gioi `limit`, alert dedup/severity, hysteresis, API key, phan biet thiet bi |
-| `e2e_check` | 19 | cam bien -> DB -> WS, FAILSAFE -> `NO_WATER`, resolve khi bom nuoc |
-| `mqtt_check` | 20 | telemetry/state/status that, lenh -> `APPLIED`, QoS 1 trung lap, config camelCase |
-| `timeout_check` | 13 | `PENDING -> TIMEOUT`, late reply `wasLate=true`, WS khong bao gio `PENDING` |
-| `mock_demo_check` | 12 | KB1 `APPLIED`, tu choi `NOT_MANUAL_MODE`, fan bat |
+| 1 | `GET /api/health` | `mqttConnected: true`, `db: "ok"` |
+| 2 | `python demo_esp32_mock.py` | Terminal in `telemetry` moi 5s |
+| 3 | `GET /api/telemetry/latest` | Gia tri cam bien, `receivedAt` ket thuc bang `Z` |
+| 4 | `GET /api/telemetry?bucket=1m` | Envelope `{bucket, data}`, co `sampleCount` |
+| 5 | `GET /api/state` | `online: true`, `lastSeenAt` duoc dien |
+| 6 | `POST /api/config` -> `MANUAL` | `202 {"status":"PUBLISHED", ...}` |
+| 7 | `POST /api/commands {"device":"fan","on":true}` | `202 {"status":"PENDING"}` roi `APPLIED` |
+| 8 | Bat lai mock voi `--no-water` | Canh bao `NO_WATER` `CRITICAL`, lenh `mist` bi `REJECTED`, bom van `false` |
+| 9 | `GET /api/commands` | `reason: "NO_WATER"` duoc giu nguyen |
 
----
+Mo `http://localhost:8000/docs` de xem va go truc tiep cac request tren.
 
 ## 7. Vai tro va phan cong
 
@@ -239,6 +224,8 @@ Khong commit `.env`, database runtime (`*.db`, `*.db-wal`, `*.db-shm`) hay `cert
 - **`limit` luon lay phan moi nhat**: `order` chi quyet dinh thu tu tra ve, nen `order=asc`
   van ve duoc N mau moi nhat dung thu tu khong phai N mau cuoi cung trong khoang.
 - **PENDING chi la REST**: WebSocket `command_result` chi nhan `APPLIED|REJECTED|TIMEOUT`.
+- **`reason` khong bi xoa**: ESP32 publish lai `state` dinh ky va thuong khong kem
+  `reason`, nen Backend chi ghi de khi tin moi co `reason` - ly do tu choi duoc giu lai.
 
 ---
 

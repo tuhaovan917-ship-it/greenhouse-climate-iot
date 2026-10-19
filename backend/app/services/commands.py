@@ -135,12 +135,16 @@ class CommandService:
             logger.warning("reply for unknown command %s", commandId)
             return CommandApplyResult(log=None)
 
-        if log.status in (COMMAND_APPLIED, COMMAND_REJECTED) and log.reason == reason:
+        # The ESP32 republishes `state` on a timer. Once a terminal result is
+        # recorded, a repeat of the same result is a no-op and must not clear an
+        # already-known reason (contract 3.5).
+        if log.status == result and log.status in (COMMAND_APPLIED, COMMAND_REJECTED):
             return CommandApplyResult(log=log, changed=False)
 
         wasLate = log.status == COMMAND_TIMEOUT
         log.status = result
-        log.reason = reason
+        # Only a provided reason updates the stored one; null means "no new info".
+        log.reason = reason or log.reason
         log.completed_at = utcNow()
         if wasLate:
             logger.info("late reply accepted for %s -> %s", commandId, result)
