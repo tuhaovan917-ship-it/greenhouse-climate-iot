@@ -189,6 +189,7 @@ python scripts/protocol_crosscheck.py  # khoa payload MQTT voi docs/mqtt-protoco
 python scripts/ws_probe.py ws://127.0.0.1:8000/ws   # heartbeat voi server dang chay
 python scripts/dashboard_replay.py http://127.0.0.1:8000  # replay dung request cua Dashboard
 python scripts/schema_compare.py <db>  # so schema da migrate voi models cua Backend
+python scripts/contract_types_check.py  # so type TS cua Dashboard voi contract
 ```
 
 `tests/test_contract_conformance.py` co mot test cho **tung dieu khoan** cua
@@ -202,7 +203,8 @@ shape JSON. `scripts/protocol_crosscheck.py` doi chieu key cua payload MQTT giua
 `docs/mqtt-protocol.md` (nhánh `feat/esp32`) va code Backend.
 `scripts/schema_compare.py` so schema do TV3 migrate (`alembic upgrade head`) voi
 table models cua Backend: bang, cot, kieu, nullability, primary key, index va
-check constraint.
+check constraint. `scripts/contract_types_check.py` doi chieu type TypeScript cua
+Dashboard (`dashboard/src/types/api.ts`) voi type trong `docs/api-contract.md`.
 
 `scripts/*_check.py` chay broker `amqtt` ngay trong may (chi la dependency dev,
 khong nam trong `requirements.txt`) nen khong can Docker.
