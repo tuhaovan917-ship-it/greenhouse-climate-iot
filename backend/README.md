@@ -251,7 +251,7 @@ luon chay `alembic upgrade head`.
 | `COMMAND_TIMEOUT_S` | `5` | Khong phan hoi -> `TIMEOUT` |
 | `DEVICE_TIMEOUT_S` | `15` | Khong co tin nhan -> `online=false` |
 | `DATABASE_URL` | `sqlite:///./greenhouse.db` | SQLite hoac PostgreSQL |
-| `MAX_SCAN_ROWS` | `20000` | Vuot qua -> `GET /api/telemetry` tra 400 thay vi cat bom |
+| `MAX_SCAN_ROWS` | `50000` | Vuot qua -> `GET /api/telemetry` tra 400 thay vi cat bom (ESP32 moi 2s -> ~43k dong/24h) |
 | `AUTO_CREATE_TABLES` | `0` | Chi dev/demo, thay cho Alembic |
 | `LOG_LEVEL` | `INFO` | `DEBUG` de in tung tin nhan MQTT nhan duoc |
 

@@ -72,7 +72,9 @@ class Settings:
     device_timeout_s: int = 15
     mqtt: MqttSettings = field(default_factory=MqttSettings)
     # Max raw rows scanned per history query before bucket aggregation (contract 3.2).
-    max_scan_rows: int = 20000
+    # The ESP32 publishes every 2s -> ~43k rows for 24h, so keep the limit above
+    # that; wider ranges must use a bucket (1m/5m/1h).
+    max_scan_rows: int = 50000
     # Rows kept in memory as recent telemetry cache for /latest fallback.
     telemetry_cache_size: int = 500
     # Dev/demo only: create missing tables at startup instead of running
