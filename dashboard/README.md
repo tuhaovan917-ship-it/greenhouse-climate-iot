@@ -2,11 +2,28 @@
 
 ## 1. Trạng thái tài liệu
 
-- Phiên bản: `0.2-aligned`.
+- Phiên bản tài liệu: `0.2.3-implementation`.
 - Người phụ trách: Người 3 - Database & Dashboard.
 - Frontend đã thống nhất ở mức kiến trúc: **React + Vite + TypeScript**.
-- Tài liệu đã đồng bộ với `docs/api-contract.md` v0.2 tại commit `917f726` của nhánh `feat/backend` và `docs/mqtt-protocol.md` ở nhánh `feat/esp32`.
-- Tám quyết định tích hợp ở mục 5 đã được Người 2 và Người 3 thống nhất. Ba chi tiết kỹ thuật ở mục 6 vẫn cần làm rõ trước khi triển khai.
+- Tài liệu và TypeScript types đã đồng bộ với `docs/api-contract.md` v0.2.3 trên nhánh `feat/backend` và `docs/mqtt-protocol.md` ở nhánh `feat/esp32`.
+- Tám quyết định tích hợp ở mục 5 và ba chi tiết kỹ thuật ở mục 6 đã được Người 2 và Người 3 thống nhất.
+
+### Trạng thái triển khai
+
+Milestone 1 và phần biểu đồ của milestone 2 đã có:
+
+- Scaffold React + Vite + TypeScript và giao diện sáng/tối bằng Tailwind CSS.
+- TypeScript types cho REST/WebSocket, bao gồm response union riêng cho telemetry raw/bucket.
+- Mock data cho trạng thái bình thường, offline, hết nước và lỗi cảm biến.
+- Màn Overview responsive: sensor cards, kết nối, mode, failsafe và actuator state.
+- Chế độ sáng/tối có switch trên header, mặc định theo hệ điều hành và ghi nhớ lựa chọn trong trình duyệt.
+- Biểu đồ lịch sử responsive bằng Recharts cho nhiệt độ, độ ẩm và ánh sáng.
+- Bộ chọn độ phân giải `raw|1m|5m|1h`, sắp xếp điểm theo thời gian và giữ khoảng trống cho giá trị `null`.
+- Empty state cho bucket chưa có dữ liệu và mock history theo đúng envelope `{ bucket, data }`.
+- Unit test cho dữ liệu hợp lệ, trường `null`, `waterOk=false`, `waterOk=null` và offline.
+- Unit test cho bucket mặc định, chuyển sang raw, ba biểu đồ và empty state.
+
+Phần chọn khoảng `from/to`, điều khiển, cảnh báo và tích hợp Backend thật thuộc các milestone tiếp theo.
 
 ## 2. Phạm vi Dashboard v0.1
 
@@ -75,13 +92,13 @@ Ngoài phạm vi v0.1:
 7. `POST /api/config` trả `202 { status: "PUBLISHED", config: desired }`; đây không phải xác nhận ESP32 đã áp dụng.
 8. Localhost không cần auth; khi mở ra LAN, `POST /api/commands` và `POST /api/config` dùng header `X-API-Key`; chưa dùng JWT.
 
-## 6. Chi tiết cần Backend làm rõ
+## 6. Chi tiết đã được Backend làm rõ ở v0.2.1
 
-1. Dữ liệu bucket không có `id` tự nhiên nhưng `Telemetry.id` đang bắt buộc. Đề xuất type `TelemetryBucket` riêng, có `sampleCount`, đồng thời chốt căn bucket theo UTC và khoảng lọc `[from, to)`.
-2. Khi command đã bị đánh `TIMEOUT` sau 5 giây nhưng phản hồi MQTT đến muộn, cần xác định có cho phép `TIMEOUT -> APPLIED/REJECTED` và push kết quả cuối mới hay không. Timeout nên cấu hình được.
-3. `WsMessage.command_result.result` nên dùng type kết quả cuối `APPLIED | REJECTED | TIMEOUT`, không dùng toàn bộ `CommandStatus` vì `PENDING` chưa phải kết quả.
+1. Dữ liệu bucket dùng `TelemetryBucket` riêng, không có `id`, có `sampleCount`; bucket căn theo UTC epoch và khoảng lọc dùng `[from, to)`.
+2. Phản hồi đến sau `TIMEOUT` được phép ghi đè thành `APPLIED/REJECTED`; WebSocket gửi `wasLate=true`. Dashboard không tự gửi lại lệnh.
+3. `WsMessage.command_result.result` chỉ nhận `APPLIED | REJECTED | TIMEOUT`; `PENDING` chỉ có ở REST và lịch sử lệnh.
 
-Các điểm này không thay đổi MQTT payload; chúng chỉ làm rõ REST/WS contract giữa Backend và Dashboard.
+Phía Dashboard định nghĩa `TelemetryHistoryResponse` riêng cho REST và không đưa `telemetry_bucket` vào `WsMessage`, vì Backend chỉ push raw telemetry realtime.
 
 ## 7. Trạng thái giao diện cần xử lý
 
@@ -102,7 +119,7 @@ IDLE -> PENDING -> APPLIED
                 -> TIMEOUT (Dashboard không tự coi là thành công)
 ```
 
-Nếu Backend cho phép late response cập nhật lệnh đã timeout, Dashboard phải nhận và hiển thị kết quả cuối mới; không tự gửi lại lệnh chỉ vì `TIMEOUT`.
+Khi late response cập nhật lệnh đã timeout, Dashboard phải nhận và hiển thị kết quả cuối mới với ghi chú phản hồi trễ; không tự gửi lại lệnh chỉ vì `TIMEOUT`.
 
 ## 8. Cấu trúc thư mục dự kiến
 
@@ -124,7 +141,7 @@ dashboard/
 └── README.md
 ```
 
-Thư viện biểu đồ và UI chưa khóa trong tài liệu này; chỉ chọn sau khi xác nhận không làm tăng phạm vi không cần thiết.
+UI dùng Tailwind CSS; biểu đồ lịch sử dùng Recharts.
 
 ## 9. Biến môi trường dự kiến
 
@@ -150,3 +167,24 @@ Chỉ commit `.env.example`. Không commit `.env` hoặc thông tin bí mật.
 - Phân biệt `waterOk=false` (`NO_WATER`) với `waterOk=null` (`SENSOR_FAULT`).
 - Reload trang vẫn tải được lịch sử cảnh báo qua REST.
 - Kiểm thử tích hợp bằng `demo_esp32_mock.py` khi Backend cung cấp.
+
+## 11. Chạy Dashboard local
+
+Yêu cầu Node.js `22.22.2+` và npm. Có thể dùng phiên bản được ghi trong `.nvmrc`.
+
+```bash
+cd dashboard
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Các lệnh kiểm tra trước khi commit:
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+Không commit `.env`, `node_modules/` hoặc `dist/`.
