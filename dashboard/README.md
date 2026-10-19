@@ -5,7 +5,7 @@
 - Phiên bản tài liệu: `0.2.3-implementation`.
 - Người phụ trách: Người 3 - Database & Dashboard.
 - Frontend đã thống nhất ở mức kiến trúc: **React + Vite + TypeScript**.
-- Tài liệu và TypeScript types đã đồng bộ với `docs/api-contract.md` v0.2.3 trên nhánh `feat/backend` và `docs/mqtt-protocol.md` ở nhánh `feat/esp32`.
+- Tài liệu và TypeScript types đã đồng bộ với `docs/api-contract.md` v0.2.4 trên nhánh `feat/backend` và `docs/mqtt-protocol.md` ở nhánh `feat/esp32`.
 - Tám quyết định tích hợp ở mục 5 và ba chi tiết kỹ thuật ở mục 6 đã được Người 2 và Người 3 thống nhất.
 
 ### Trạng thái triển khai
@@ -29,7 +29,7 @@ Các milestone Overview, biểu đồ lịch sử và control flow đã có:
 - Khu vực cảnh báo tách rõ cảnh báo đang hoạt động và lịch sử đã xử lý, hiển thị severity, code và thời gian.
 - Empty state khi hệ thống an toàn; cấu trúc sẵn sàng khôi phục lịch sử từ `GET /api/alerts` sau reload/reconnect.
 - REST client đã tích hợp telemetry/state/history/config/commands/alerts theo contract Backend v0.2.3.
-- Một WebSocket duy nhất nhận telemetry/state/command_result/alert, có ping keepalive, tự reconnect và fallback polling 5 giây.
+- Một WebSocket duy nhất nhận telemetry/state/command_result/alert, bỏ qua heartbeat `ping` do server gửi, tự reconnect và fallback polling 5 giây.
 - Khi reconnect, Dashboard tải lại latest telemetry, state và lịch sử cảnh báo; biểu đồ được đồng bộ lại định kỳ.
 
 Phần chọn khoảng `from/to` thuộc milestone tiếp theo.
@@ -86,7 +86,8 @@ Ngoài phạm vi v0.1:
 ### WebSocket
 
 - Kết nối: `WS /ws?deviceId=greenhouse-01`.
-- Các message dự kiến: `telemetry`, `state`, `command_result`, `alert`.
+- Các message dự kiến: `telemetry`, `state`, `command_result`, `alert`, `ping`.
+- Backend gửi `{"type":"ping"}` mỗi 20 giây; Dashboard không gửi heartbeat và bỏ qua type không nhận diện.
 - Khi WebSocket mất kết nối, Dashboard polling `telemetry/latest` và `state` mỗi 5 giây.
 - Khi WebSocket kết nối lại, Dashboard tải lại latest state và các cảnh báo đang active trước khi tiếp tục nhận realtime.
 

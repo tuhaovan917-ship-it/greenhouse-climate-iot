@@ -125,5 +125,6 @@ export interface CommandResultData {
 export type WsMessage =
   | { type: 'telemetry'; data: Telemetry }
   | { type: 'state'; data: DeviceState }
+  | { type: 'ping' }
   | { type: 'command_result'; data: CommandResultData }
   | { type: 'alert'; data: Alert }

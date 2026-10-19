@@ -75,6 +75,7 @@ const reasonLabels: Record<string, string> = {
   NOT_MANUAL_MODE: 'Thiết bị không ở chế độ MANUAL',
   DEVICE_OFFLINE: 'Thiết bị đang ngoại tuyến',
   MQTT_NOT_CONNECTED: 'Backend chưa kết nối MQTT',
+  TIMEOUT: 'Không nhận được phản hồi sau thời hạn',
 }
 
 function getBlockReason(

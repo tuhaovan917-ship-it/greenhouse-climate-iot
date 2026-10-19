@@ -35,7 +35,6 @@ interface UseGreenhouseDashboardOptions {
 
 const pollingIntervalMs = 5_000
 const reconnectDelayMs = 3_000
-const pingIntervalMs = 10_000
 const historyRefreshMs = 30_000
 
 function getHistoryStart() {
@@ -170,7 +169,6 @@ export function useGreenhouseDashboard({
     let socket: WebSocket | null = null
     let reconnectTimer: number | null = null
     let pollingTimer: number | null = null
-    let pingTimer: number | null = null
 
     function stopPolling() {
       if (pollingTimer !== null) {
@@ -197,6 +195,10 @@ export function useGreenhouseDashboard({
       try {
         message = JSON.parse(event.data) as WsMessage
       } catch {
+        return
+      }
+
+      if (message.type === 'ping') {
         return
       }
 
@@ -242,22 +244,11 @@ export function useGreenhouseDashboard({
         setRealtimeStatus('connected')
         stopPolling()
         void refreshSnapshot().catch(() => undefined)
-
-        pingTimer = window.setInterval(() => {
-          if (socket?.readyState === WebSocket.OPEN) {
-            socket.send('ping')
-          }
-        }, pingIntervalMs)
       }
 
       socket.onmessage = handleMessage
       socket.onerror = () => socket?.close()
       socket.onclose = () => {
-        if (pingTimer !== null) {
-          window.clearInterval(pingTimer)
-          pingTimer = null
-        }
-
         if (stopped) {
           return
         }
@@ -279,9 +270,6 @@ export function useGreenhouseDashboard({
 
       if (reconnectTimer !== null) {
         window.clearTimeout(reconnectTimer)
-      }
-      if (pingTimer !== null) {
-        window.clearInterval(pingTimer)
       }
 
       socket?.close()

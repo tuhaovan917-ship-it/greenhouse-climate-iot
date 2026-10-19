@@ -103,6 +103,10 @@ describe('useGreenhouseDashboard', () => {
     act(() => socket.message({ type: 'state', data: manualState }))
     expect(result.current.deviceState).toEqual(manualState)
 
+    act(() => socket.message({ type: 'ping' }))
+    expect(result.current.deviceState).toEqual(manualState)
+    expect(socket.send).not.toHaveBeenCalled()
+
     const requestsBeforeDisconnect = apiMocks.getLatestTelemetry.mock.calls.length
     act(() => socket.disconnect())
 
