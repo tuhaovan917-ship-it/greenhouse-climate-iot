@@ -159,7 +159,6 @@ function LiveDashboard() {
 
   if (
     dashboard.status !== 'ready' ||
-    !dashboard.telemetry ||
     !dashboard.deviceState ||
     !dashboard.history ||
     !dashboard.config

@@ -51,7 +51,7 @@ export interface DeviceState {
   lastCommandId: string | null
   lastCommandResult: 'APPLIED' | 'REJECTED' | null
   reason?: string | null
-  updatedAt: string
+  updatedAt: string | null
 }
 
 export interface DeviceConfig {

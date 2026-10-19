@@ -70,6 +70,16 @@ describe('ControlPanel', () => {
     expect(screen.getByText('Hết nước — failsafe khóa bơm')).toBeInTheDocument()
   })
 
+  it('khóa yêu cầu bật bơm khi chưa có telemetry', () => {
+    renderControlPanel({
+      deviceState: { ...mockDeviceState, mode: 'MANUAL' },
+      telemetry: null,
+    })
+
+    expect(screen.getByRole('button', { name: 'Bật Bơm phun sương' })).toBeDisabled()
+    expect(screen.getByText('Chưa có dữ liệu nguồn nước — bơm bị khóa an toàn')).toBeInTheDocument()
+  })
+
   it('phân biệt PUBLISHED với trạng thái mode thực tế', async () => {
     const user = userEvent.setup()
     const { onPublishMode } = renderControlPanel()

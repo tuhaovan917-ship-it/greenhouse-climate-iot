@@ -87,6 +87,20 @@ afterEach(() => {
 })
 
 describe('useGreenhouseDashboard', () => {
+  it('vẫn sẵn sàng khi hệ thống mới chưa có telemetry', async () => {
+    apiMocks.getLatestTelemetry.mockResolvedValue(null)
+
+    const { result, unmount } = renderHook(() =>
+      useGreenhouseDashboard({ deviceId: 'greenhouse-01', enabled: true }),
+    )
+
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.telemetry).toBeNull()
+    expect(result.current.deviceState).toEqual(mockDeviceState)
+
+    unmount()
+  })
+
   it('nhận state qua WebSocket và chuyển sang polling khi socket mất', async () => {
     const { result, unmount } = renderHook(() =>
       useGreenhouseDashboard({ deviceId: 'greenhouse-01', enabled: true }),

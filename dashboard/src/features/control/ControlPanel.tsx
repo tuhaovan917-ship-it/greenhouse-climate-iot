@@ -26,7 +26,7 @@ import type {
 import { formatTimestamp } from '../../utils/formatters'
 
 interface ControlPanelProps {
-  telemetry: Telemetry
+  telemetry: Telemetry | null
   deviceState: DeviceState
   config: DeviceConfig
   commands: CommandActivity[]
@@ -81,7 +81,7 @@ const reasonLabels: Record<string, string> = {
 function getBlockReason(
   device: DeviceName,
   requestedOn: boolean,
-  telemetry: Telemetry,
+  telemetry: Telemetry | null,
   deviceState: DeviceState,
 ) {
   if (!deviceState.online) {
@@ -92,10 +92,16 @@ function getBlockReason(
     return 'Chỉ điều khiển trực tiếp trong chế độ MANUAL'
   }
 
-  if (device === 'mist' && requestedOn && telemetry.waterOk !== true) {
-    return telemetry.waterOk === false
-      ? 'Hết nước — failsafe khóa bơm'
-      : 'Chưa xác minh được cảm biến nước'
+  if (device === 'mist' && requestedOn) {
+    if (telemetry === null) {
+      return 'Chưa có dữ liệu nguồn nước — bơm bị khóa an toàn'
+    }
+
+    if (telemetry.waterOk !== true) {
+      return telemetry.waterOk === false
+        ? 'Hết nước — failsafe khóa bơm'
+        : 'Chưa xác minh được cảm biến nước'
+    }
   }
 
   return null

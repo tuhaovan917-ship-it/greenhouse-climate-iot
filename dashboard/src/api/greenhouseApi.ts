@@ -46,7 +46,7 @@ function withQuery(path: string, params: Record<string, string | number | boolea
 }
 
 export function getLatestTelemetry(deviceId: string) {
-  return apiRequest<Telemetry>(withQuery('/api/telemetry/latest', { deviceId }))
+  return apiRequest<Telemetry | null>(withQuery('/api/telemetry/latest', { deviceId }))
 }
 
 export function getDeviceState(deviceId: string) {

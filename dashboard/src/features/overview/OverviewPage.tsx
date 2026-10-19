@@ -47,7 +47,7 @@ interface ControlBindings {
 }
 
 interface OverviewPageProps {
-  telemetry: Telemetry
+  telemetry: Telemetry | null
   deviceState: DeviceState
   history: TelemetryHistoryByBucket
   dataSource: 'mock' | 'live'
@@ -63,7 +63,17 @@ const navigationItems = [
   { label: 'Cảnh báo', icon: BellRing, href: '#alerts', active: false },
 ]
 
-function getWaterStatus(waterOk: boolean | null) {
+function getWaterStatus(telemetry: Telemetry | null) {
+  if (telemetry === null) {
+    return {
+      value: 'Chưa có dữ liệu',
+      helper: 'Đang chờ telemetry từ thiết bị',
+      tone: 'neutral' as const,
+    }
+  }
+
+  const { waterOk } = telemetry
+
   if (waterOk === true) {
     return {
       value: 'Đủ nước',
@@ -96,12 +106,13 @@ export function OverviewPage({
   alerts,
   realtimeStatus,
 }: OverviewPageProps) {
-  const waterStatus = getWaterStatus(telemetry.waterOk)
-  const temperature = formatMeasurement(telemetry.temperatureC)
-  const humidity = formatMeasurement(telemetry.humidityPct)
-  const light = formatMeasurement(telemetry.lightLux, {
+  const waterStatus = getWaterStatus(telemetry)
+  const temperature = formatMeasurement(telemetry?.temperatureC ?? null)
+  const humidity = formatMeasurement(telemetry?.humidityPct ?? null)
+  const light = formatMeasurement(telemetry?.lightLux ?? null, {
     maximumFractionDigits: 0,
   })
+  const missingTelemetryHelper = 'Chưa nhận được telemetry từ thiết bị'
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f3f7f4] text-slate-900 transition-colors duration-300 dark:bg-[#07110e] dark:text-slate-100">
@@ -222,10 +233,17 @@ export function OverviewPage({
                     Cập nhật gần nhất
                   </span>
                 </div>
-                <p className="mt-4 max-w-3xl text-3xl font-semibold leading-tight tracking-[-0.045em] text-slate-950 dark:text-white sm:text-4xl xl:text-5xl">
-                  Môi trường đang ở trạng thái{' '}
-                  <span className="text-emerald-700 dark:text-emerald-300">ổn định.</span>
-                </p>
+                {telemetry ? (
+                  <p className="mt-4 max-w-3xl text-3xl font-semibold leading-tight tracking-[-0.045em] text-slate-950 dark:text-white sm:text-4xl xl:text-5xl">
+                    Môi trường đang ở trạng thái{' '}
+                    <span className="text-emerald-700 dark:text-emerald-300">ổn định.</span>
+                  </p>
+                ) : (
+                  <p className="mt-4 max-w-3xl text-3xl font-semibold leading-tight tracking-[-0.045em] text-slate-950 dark:text-white sm:text-4xl xl:text-5xl">
+                    Đang chờ{' '}
+                    <span className="text-amber-700 dark:text-amber-300">bản tin telemetry đầu tiên.</span>
+                  </p>
+                )}
                 <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
                   Các chỉ số dưới đây phản ánh dữ liệu và trạng thái thiết bị thực tế gần nhất.
                   Lệnh điều khiển sẽ không được xem là thành công cho đến khi có phản hồi từ ESP32.
@@ -277,7 +295,7 @@ export function OverviewPage({
                 </h2>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-400">
-                Nhận lúc {formatTimestamp(telemetry.receivedAt)}
+                Nhận lúc {formatTimestamp(telemetry?.receivedAt ?? null)}
               </p>
             </div>
 
@@ -285,10 +303,12 @@ export function OverviewPage({
               <SensorCard
                 title="Nhiệt độ"
                 value={temperature}
-                unit={telemetry.temperatureC === null ? undefined : '°C'}
+                unit={telemetry?.temperatureC == null ? undefined : '°C'}
                 helper={
-                  telemetry.temperatureC === null
-                    ? 'Cảm biến chưa cung cấp giá trị hợp lệ'
+                  telemetry === null
+                    ? missingTelemetryHelper
+                    : telemetry.temperatureC === null
+                      ? 'Cảm biến chưa cung cấp giá trị hợp lệ'
                     : 'Trong vùng theo dõi hiện tại'
                 }
                 icon={Thermometer}
@@ -297,10 +317,12 @@ export function OverviewPage({
               <SensorCard
                 title="Độ ẩm không khí"
                 value={humidity}
-                unit={telemetry.humidityPct === null ? undefined : '%'}
+                unit={telemetry?.humidityPct == null ? undefined : '%'}
                 helper={
-                  telemetry.humidityPct === null
-                    ? 'Cảm biến chưa cung cấp giá trị hợp lệ'
+                  telemetry === null
+                    ? missingTelemetryHelper
+                    : telemetry.humidityPct === null
+                      ? 'Cảm biến chưa cung cấp giá trị hợp lệ'
                     : 'Độ ẩm phù hợp với cấu hình'
                 }
                 icon={Droplets}
@@ -309,10 +331,12 @@ export function OverviewPage({
               <SensorCard
                 title="Cường độ sáng"
                 value={light}
-                unit={telemetry.lightLux === null ? undefined : 'lux'}
+                unit={telemetry?.lightLux == null ? undefined : 'lux'}
                 helper={
-                  telemetry.lightLux === null
-                    ? 'Cảm biến chưa cung cấp giá trị hợp lệ'
+                  telemetry === null
+                    ? missingTelemetryHelper
+                    : telemetry.lightLux === null
+                      ? 'Cảm biến chưa cung cấp giá trị hợp lệ'
                     : 'Đèn được điều khiển theo ngưỡng'
                 }
                 icon={Sun}

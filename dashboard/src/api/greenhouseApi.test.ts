@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getTelemetryHistory, postCommand } from './greenhouseApi'
+import { getLatestTelemetry, getTelemetryHistory, postCommand } from './greenhouseApi'
 import { ApiError } from './httpClient'
 
 function jsonResponse(payload: unknown, init: ResponseInit = {}) {
@@ -15,6 +15,12 @@ afterEach(() => {
 })
 
 describe('greenhouseApi', () => {
+  it('chấp nhận latest telemetry null khi database chưa có dữ liệu', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(null)))
+
+    await expect(getLatestTelemetry('greenhouse-01')).resolves.toBeNull()
+  })
+
   it('gửi đúng query lịch sử theo semantics của Backend', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({ bucket: '5m', data: [] }),

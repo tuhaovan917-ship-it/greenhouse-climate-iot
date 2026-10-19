@@ -44,6 +44,22 @@ describe('OverviewPage', () => {
     expect(screen.getByText('Cảm biến nước không đáng tin cậy')).toBeInTheDocument()
   })
 
+  it('render trạng thái an toàn khi Backend chưa có telemetry', () => {
+    render(
+      <OverviewPage
+        telemetry={null}
+        deviceState={{ ...mockOfflineState, updatedAt: null }}
+        history={mockTelemetryHistoryByBucket}
+        dataSource="live"
+      />,
+    )
+
+    expect(screen.getByText('bản tin telemetry đầu tiên.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Nhiệt độ: Không có dữ liệu')).toBeInTheDocument()
+    expect(screen.getByLabelText('Nguồn nước: Chưa có dữ liệu')).toBeInTheDocument()
+    expect(screen.getAllByText('Chưa nhận được telemetry từ thiết bị')).toHaveLength(3)
+  })
+
   it('phân biệt hết nước với lỗi cảm biến nước', () => {
     render(
       <OverviewPage
