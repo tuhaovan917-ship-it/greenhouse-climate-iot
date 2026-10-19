@@ -19,6 +19,7 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { ActuatorCard } from '../../components/ActuatorCard'
 import { SensorCard } from '../../components/SensorCard'
 import { StatusBadge } from '../../components/StatusBadge'
@@ -31,26 +32,36 @@ import type {
   DeviceConfig,
   DeviceState,
   Telemetry,
-  TelemetryHistoryByBucket,
+  TelemetryHistoryResponse,
   Alert,
 } from '../../types/api'
 import { formatMeasurement, formatTimestamp } from '../../utils/formatters'
 import { ControlPanel } from '../control/ControlPanel'
 import { AlertsPanel } from '../alerts/AlertsPanel'
-import { TelemetryHistoryPanel } from '../history/TelemetryHistoryPanel'
+import type { HistoryQuery } from '../history/historyQuery'
+import { isTelemetryStale } from './telemetryFreshness'
+
+const TelemetryHistoryPanel = lazy(async () => {
+  const module = await import('../history/TelemetryHistoryPanel')
+  return { default: module.TelemetryHistoryPanel }
+})
 
 interface ControlBindings {
   config: DeviceConfig
   commands: CommandActivity[]
   onSendCommand: (request: CommandRequest) => Promise<void>
   onPublishMode: (mode: ControlMode) => Promise<ConfigPublished>
+  onPublishConfig: (config: DeviceConfig) => Promise<ConfigPublished>
 }
 
 interface OverviewPageProps {
   telemetry: Telemetry | null
   deviceState: DeviceState
-  history: TelemetryHistoryByBucket
-  dataSource: 'mock' | 'live'
+  history: TelemetryHistoryResponse | null
+  historyLoading?: boolean
+  historyError?: string | null
+  onHistoryQueryChange?: (query: HistoryQuery) => void
+  onRetryHistory?: () => void
   control?: ControlBindings
   alerts?: Alert[]
   realtimeStatus?: 'connecting' | 'connected' | 'polling'
@@ -101,11 +112,15 @@ export function OverviewPage({
   telemetry,
   deviceState,
   history,
-  dataSource,
+  historyLoading = false,
+  historyError = null,
+  onHistoryQueryChange = () => undefined,
+  onRetryHistory = () => undefined,
   control,
   alerts,
   realtimeStatus,
 }: OverviewPageProps) {
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const waterStatus = getWaterStatus(telemetry)
   const temperature = formatMeasurement(telemetry?.temperatureC ?? null)
   const humidity = formatMeasurement(telemetry?.humidityPct ?? null)
@@ -113,6 +128,12 @@ export function OverviewPage({
     maximumFractionDigits: 0,
   })
   const missingTelemetryHelper = 'Chưa nhận được telemetry từ thiết bị'
+  const telemetryStale = isTelemetryStale(telemetry, deviceState.online, nowMs)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 5_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f3f7f4] text-slate-900 transition-colors duration-300 dark:bg-[#07110e] dark:text-slate-100">
@@ -200,9 +221,7 @@ export function OverviewPage({
 
             <div className="flex flex-wrap items-center gap-2">
               <ThemeToggle />
-              {dataSource === 'mock' ? (
-                <StatusBadge tone="warning">Dữ liệu mô phỏng</StatusBadge>
-              ) : realtimeStatus ? (
+              {realtimeStatus ? (
                 <StatusBadge
                   tone={realtimeStatus === 'connected' ? 'positive' : realtimeStatus === 'polling' ? 'warning' : 'neutral'}
                   showDot
@@ -215,10 +234,14 @@ export function OverviewPage({
                 </StatusBadge>
               ) : null}
               <StatusBadge
-                tone={deviceState.online ? 'positive' : 'critical'}
+                tone={deviceState.online ? telemetryStale ? 'warning' : 'positive' : 'critical'}
                 showDot
               >
-                {deviceState.online ? 'Hệ thống ổn định' : 'Mất kết nối'}
+                {deviceState.online
+                  ? telemetryStale
+                    ? 'Dữ liệu chậm cập nhật'
+                    : 'Hệ thống ổn định'
+                  : 'Mất kết nối'}
               </StatusBadge>
             </div>
           </header>
@@ -233,10 +256,20 @@ export function OverviewPage({
                     Cập nhật gần nhất
                   </span>
                 </div>
-                {telemetry ? (
+                {telemetry && deviceState.online && !telemetryStale ? (
                   <p className="mt-4 max-w-3xl text-3xl font-semibold leading-tight tracking-[-0.045em] text-slate-950 dark:text-white sm:text-4xl xl:text-5xl">
                     Môi trường đang ở trạng thái{' '}
                     <span className="text-emerald-700 dark:text-emerald-300">ổn định.</span>
+                  </p>
+                ) : telemetry && !deviceState.online ? (
+                  <p className="mt-4 max-w-3xl text-3xl font-semibold leading-tight tracking-[-0.045em] text-slate-950 dark:text-white sm:text-4xl xl:text-5xl">
+                    Thiết bị đang{' '}
+                    <span className="text-red-700 dark:text-red-300">ngoại tuyến.</span>
+                  </p>
+                ) : telemetryStale ? (
+                  <p className="mt-4 max-w-3xl text-3xl font-semibold leading-tight tracking-[-0.045em] text-slate-950 dark:text-white sm:text-4xl xl:text-5xl">
+                    Dữ liệu đang{' '}
+                    <span className="text-amber-700 dark:text-amber-300">chậm cập nhật.</span>
                   </p>
                 ) : (
                   <p className="mt-4 max-w-3xl text-3xl font-semibold leading-tight tracking-[-0.045em] text-slate-950 dark:text-white sm:text-4xl xl:text-5xl">
@@ -353,7 +386,23 @@ export function OverviewPage({
             </div>
           </section>
 
-          <TelemetryHistoryPanel history={history} />
+          <Suspense
+            fallback={(
+              <section className="pb-8" id="history">
+                <div className="panel-card grid min-h-72 place-items-center p-6 text-sm text-slate-600 dark:text-slate-400">
+                  Đang tải biểu đồ lịch sử…
+                </div>
+              </section>
+            )}
+          >
+            <TelemetryHistoryPanel
+              error={historyError}
+              history={history}
+              loading={historyLoading}
+              onQueryChange={onHistoryQueryChange}
+              onRetry={onRetryHistory}
+            />
+          </Suspense>
 
           <section className="grid gap-4 pb-10 xl:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.85fr)]">
             <article className="panel-card p-5 sm:p-6">
@@ -440,6 +489,7 @@ export function OverviewPage({
               config={control.config}
               deviceState={deviceState}
               onPublishMode={control.onPublishMode}
+              onPublishConfig={control.onPublishConfig}
               onSendCommand={control.onSendCommand}
               telemetry={telemetry}
             />

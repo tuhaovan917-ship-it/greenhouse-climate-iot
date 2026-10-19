@@ -1,13 +1,13 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { mockAlerts } from '../../mocks/greenhouse'
+import { fixtureAlerts } from '../../test/fixtures'
 import type { Alert } from '../../types/api'
 import { AlertsPanel } from './AlertsPanel'
 
 describe('AlertsPanel', () => {
   it('mặc định ưu tiên cảnh báo active và có empty state an toàn', () => {
-    render(<AlertsPanel alerts={mockAlerts} />)
+    render(<AlertsPanel alerts={fixtureAlerts} />)
 
     expect(screen.getByRole('button', { name: 'Đang hoạt động (0)' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('Không có cảnh báo đang hoạt động')).toBeInTheDocument()
@@ -15,7 +15,7 @@ describe('AlertsPanel', () => {
 
   it('hiển thị lại lịch sử đã xử lý sau reload', async () => {
     const user = userEvent.setup()
-    render(<AlertsPanel alerts={mockAlerts} />)
+    render(<AlertsPanel alerts={fixtureAlerts} />)
 
     await user.click(screen.getByRole('button', { name: 'Đã xử lý (2)' }))
 

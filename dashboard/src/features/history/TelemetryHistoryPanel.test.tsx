@@ -1,10 +1,30 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
-import { mockTelemetryHistoryByBucket } from '../../mocks/greenhouse'
-import type { TelemetryHistoryByBucket } from '../../types/api'
+import type { ComponentProps } from 'react'
+import { describe, expect, it, vi } from 'vitest'
+import { fixtureTelemetryHistoryByBucket } from '../../test/fixtures'
 import { normalizeTelemetryHistory } from './historyTransform'
 import { TelemetryHistoryPanel } from './TelemetryHistoryPanel'
+
+function renderHistory(
+  overrides: Partial<ComponentProps<typeof TelemetryHistoryPanel>> = {},
+) {
+  const onQueryChange = vi.fn()
+  const onRetry = vi.fn()
+
+  render(
+    <TelemetryHistoryPanel
+      error={null}
+      history={fixtureTelemetryHistoryByBucket['5m']}
+      loading={false}
+      onQueryChange={onQueryChange}
+      onRetry={onRetry}
+      {...overrides}
+    />,
+  )
+
+  return { onQueryChange, onRetry }
+}
 
 describe('TelemetryHistoryPanel', () => {
   it('sắp xếp dữ liệu Backend theo thời gian tăng dần và giữ nguyên null', () => {
@@ -12,13 +32,13 @@ describe('TelemetryHistoryPanel', () => {
       bucket: 'raw',
       data: [
         {
-          ...mockTelemetryHistoryByBucket.raw.data[0],
+          ...fixtureTelemetryHistoryByBucket.raw.data[0],
           id: 2,
           receivedAt: '2026-10-19T09:00:00Z',
           temperatureC: null,
         },
         {
-          ...mockTelemetryHistoryByBucket.raw.data[1],
+          ...fixtureTelemetryHistoryByBucket.raw.data[1],
           id: 1,
           receivedAt: '2026-10-19T08:59:00Z',
           temperatureC: 27.5,
@@ -34,7 +54,7 @@ describe('TelemetryHistoryPanel', () => {
   })
 
   it('mặc định hiển thị bucket 5 phút và ba biểu đồ môi trường', () => {
-    render(<TelemetryHistoryPanel history={mockTelemetryHistoryByBucket} />)
+    renderHistory()
 
     expect(screen.getByRole('heading', { name: 'Lịch sử môi trường' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Xem trung bình mỗi 5 phút' })).toHaveAttribute(
@@ -46,29 +66,37 @@ describe('TelemetryHistoryPanel', () => {
     expect(screen.getByRole('img', { name: 'Biểu đồ cường độ sáng theo thời gian' })).toBeInTheDocument()
   })
 
-  it('cho phép chuyển sang dữ liệu raw mà không đổi null thành 0', async () => {
+  it('gửi query Backend khi đổi khoảng thời gian và bucket', async () => {
     const user = userEvent.setup()
-    render(<TelemetryHistoryPanel history={mockTelemetryHistoryByBucket} />)
+    const { onQueryChange } = renderHistory()
 
+    expect(screen.getByRole('button', { name: 'Xem mẫu thô' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '15 phút' }))
     await user.click(screen.getByRole('button', { name: 'Xem mẫu thô' }))
 
     expect(screen.getByRole('button', { name: 'Xem mẫu thô' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
-    expect(screen.getByText('Mẫu thô')).toBeInTheDocument()
-    expect(screen.getByText(/không được đổi thành 0/i)).toBeInTheDocument()
+    expect(onQueryChange).toHaveBeenLastCalledWith({ bucket: 'raw', range: '15m' })
   })
 
   it('hiển thị empty state khi bucket được chọn không có dữ liệu', () => {
-    const emptyHistory: TelemetryHistoryByBucket = {
-      ...mockTelemetryHistoryByBucket,
-      '5m': { bucket: '5m', data: [] },
-    }
-
-    render(<TelemetryHistoryPanel history={emptyHistory} />)
+    renderHistory({ history: { bucket: '5m', data: [] } })
 
     expect(screen.getByText('Chưa có dữ liệu lịch sử')).toBeInTheDocument()
     expect(screen.queryByRole('img', { name: 'Biểu đồ nhiệt độ theo thời gian' })).not.toBeInTheDocument()
+  })
+
+  it('hiển thị lỗi history riêng và cho phép thử lại', async () => {
+    const user = userEvent.setup()
+    const { onRetry } = renderHistory({
+      error: 'Khoảng thời gian quá rộng',
+      history: null,
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Khoảng thời gian quá rộng')
+    await user.click(screen.getByRole('button', { name: 'Thử tải lại' }))
+    expect(onRetry).toHaveBeenCalledOnce()
   })
 })

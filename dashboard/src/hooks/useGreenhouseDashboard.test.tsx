@@ -1,13 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  mockAlerts,
-  mockCommandHistory,
-  mockDeviceConfig,
-  mockDeviceState,
-  mockTelemetry,
-  mockTelemetryHistoryByBucket,
-} from '../mocks/greenhouse'
+  fixtureAlerts,
+  fixtureCommandHistory,
+  fixtureDeviceConfig,
+  fixtureDeviceState,
+  fixtureTelemetry,
+  fixtureTelemetryHistoryByBucket,
+} from '../test/fixtures'
 import { useGreenhouseDashboard } from './useGreenhouseDashboard'
 
 const apiMocks = vi.hoisted(() => ({
@@ -71,14 +71,14 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal('WebSocket', FakeWebSocket)
 
-  apiMocks.getLatestTelemetry.mockResolvedValue(mockTelemetry)
-  apiMocks.getDeviceState.mockResolvedValue(mockDeviceState)
-  apiMocks.getDeviceConfig.mockResolvedValue(mockDeviceConfig)
-  apiMocks.getCommands.mockResolvedValue({ data: mockCommandHistory })
-  apiMocks.getAlerts.mockResolvedValue({ data: mockAlerts })
+  apiMocks.getLatestTelemetry.mockResolvedValue(fixtureTelemetry)
+  apiMocks.getDeviceState.mockResolvedValue(fixtureDeviceState)
+  apiMocks.getDeviceConfig.mockResolvedValue(fixtureDeviceConfig)
+  apiMocks.getCommands.mockResolvedValue({ data: fixtureCommandHistory })
+  apiMocks.getAlerts.mockResolvedValue({ data: fixtureAlerts })
   apiMocks.getTelemetryHistory.mockImplementation(
-    ({ bucket }: { bucket: keyof typeof mockTelemetryHistoryByBucket }) =>
-      Promise.resolve(mockTelemetryHistoryByBucket[bucket]),
+    ({ bucket }: { bucket: keyof typeof fixtureTelemetryHistoryByBucket }) =>
+      Promise.resolve(fixtureTelemetryHistoryByBucket[bucket]),
   )
 })
 
@@ -87,6 +87,35 @@ afterEach(() => {
 })
 
 describe('useGreenhouseDashboard', () => {
+  it('chỉ tải bucket được chọn với from/to và không reconnect WebSocket', async () => {
+    const { result, unmount } = renderHook(() =>
+      useGreenhouseDashboard({ deviceId: 'greenhouse-01', enabled: true }),
+    )
+
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    await waitFor(() => expect(apiMocks.getTelemetryHistory).toHaveBeenCalled())
+    expect(apiMocks.getTelemetryHistory).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        deviceId: 'greenhouse-01',
+        bucket: '5m',
+        limit: 1_000,
+        order: 'asc',
+        from: expect.any(String),
+        to: expect.any(String),
+      }),
+    )
+
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
+    act(() => result.current.updateHistoryQuery({ bucket: '1m', range: '6h' }))
+
+    await waitFor(() => expect(apiMocks.getTelemetryHistory).toHaveBeenLastCalledWith(
+      expect.objectContaining({ bucket: '1m' }),
+    ))
+    expect(FakeWebSocket.instances).toHaveLength(1)
+
+    unmount()
+  })
+
   it('vẫn sẵn sàng khi hệ thống mới chưa có telemetry', async () => {
     apiMocks.getLatestTelemetry.mockResolvedValue(null)
 
@@ -96,7 +125,7 @@ describe('useGreenhouseDashboard', () => {
 
     await waitFor(() => expect(result.current.status).toBe('ready'))
     expect(result.current.telemetry).toBeNull()
-    expect(result.current.deviceState).toEqual(mockDeviceState)
+    expect(result.current.deviceState).toEqual(fixtureDeviceState)
 
     unmount()
   })
@@ -113,7 +142,7 @@ describe('useGreenhouseDashboard', () => {
     act(() => socket.open())
     expect(result.current.realtimeStatus).toBe('connected')
 
-    const manualState = { ...mockDeviceState, mode: 'MANUAL' as const, fan: false }
+    const manualState = { ...fixtureDeviceState, mode: 'MANUAL' as const, fan: false }
     act(() => socket.message({ type: 'state', data: manualState }))
     expect(result.current.deviceState).toEqual(manualState)
 

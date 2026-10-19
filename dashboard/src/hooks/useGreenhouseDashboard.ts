@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   getAlerts,
   getCommands,
@@ -12,6 +12,11 @@ import {
 } from '../api/greenhouseApi'
 import { dashboardConfig } from '../api/config'
 import { createPendingCommand, mergeCommandResult } from '../features/control/commandState'
+import {
+  defaultHistoryQuery,
+  getHistoryBounds,
+  type HistoryQuery,
+} from '../features/history/historyQuery'
 import type {
   Alert,
   CommandActivity,
@@ -21,7 +26,7 @@ import type {
   DeviceConfig,
   DeviceState,
   Telemetry,
-  TelemetryHistoryByBucket,
+  TelemetryHistoryResponse,
   WsMessage,
 } from '../types/api'
 
@@ -37,47 +42,27 @@ const pollingIntervalMs = 5_000
 const reconnectDelayMs = 3_000
 const historyRefreshMs = 30_000
 
-function getHistoryStart() {
-  return new Date(Date.now() - 24 * 60 * 60 * 1_000).toISOString()
-}
-
-async function loadHistory(deviceId: string): Promise<TelemetryHistoryByBucket> {
-  const from = getHistoryStart()
-  const [raw, oneMinute, fiveMinutes, oneHour] = await Promise.all([
-    getTelemetryHistory({ deviceId, bucket: 'raw', from }),
-    getTelemetryHistory({ deviceId, bucket: '1m', from }),
-    getTelemetryHistory({ deviceId, bucket: '5m', from }),
-    getTelemetryHistory({ deviceId, bucket: '1h', from }),
-  ])
-
-  return {
-    raw,
-    '1m': oneMinute,
-    '5m': fiveMinutes,
-    '1h': oneHour,
-  }
-}
-
 function upsertAlert(current: Alert[], incoming: Alert) {
   return [incoming, ...current.filter((alert) => alert.id !== incoming.id)]
 }
 
 function upsertRawTelemetry(
-  history: TelemetryHistoryByBucket,
+  history: TelemetryHistoryResponse,
   telemetry: Telemetry,
-): TelemetryHistoryByBucket {
+): TelemetryHistoryResponse {
+  if (history.bucket !== 'raw') {
+    return history
+  }
+
   const latest = [
     telemetry,
-    ...history.raw.data.filter((item) => item.id !== telemetry.id),
+    ...history.data.filter((item) => item.id !== telemetry.id),
   ]
     .sort((left, right) => Date.parse(right.receivedAt) - Date.parse(left.receivedAt))
     .slice(0, 100)
     .reverse()
 
-  return {
-    ...history,
-    raw: { bucket: 'raw', data: latest },
-  }
+  return { bucket: 'raw', data: latest }
 }
 
 function getErrorMessage(error: unknown) {
@@ -93,10 +78,14 @@ export function useGreenhouseDashboard({
   const [error, setError] = useState<string | null>(null)
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null)
   const [deviceState, setDeviceState] = useState<DeviceState | null>(null)
-  const [history, setHistory] = useState<TelemetryHistoryByBucket | null>(null)
+  const [history, setHistory] = useState<TelemetryHistoryResponse | null>(null)
+  const [historyQuery, setHistoryQuery] = useState<HistoryQuery>(defaultHistoryQuery)
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [historyError, setHistoryError] = useState<string | null>(null)
   const [config, setConfig] = useState<DeviceConfig | null>(null)
   const [commands, setCommands] = useState<CommandActivity[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
+  const historyRequestId = useRef(0)
 
   const loadInitial = useCallback(async () => {
     if (!enabled) {
@@ -110,14 +99,12 @@ export function useGreenhouseDashboard({
       const [
         latestTelemetry,
         latestState,
-        latestHistory,
         latestConfig,
         commandList,
         alertList,
       ] = await Promise.all([
         getLatestTelemetry(deviceId),
         getDeviceState(deviceId),
-        loadHistory(deviceId),
         getDeviceConfig(deviceId),
         getCommands(deviceId),
         getAlerts({ deviceId }),
@@ -125,7 +112,6 @@ export function useGreenhouseDashboard({
 
       setTelemetry(latestTelemetry)
       setDeviceState(latestState)
-      setHistory(latestHistory)
       setConfig(latestConfig)
       setCommands(commandList.data)
       setAlerts(alertList.data)
@@ -149,8 +135,42 @@ export function useGreenhouseDashboard({
   }, [deviceId])
 
   const refreshHistory = useCallback(async () => {
-    setHistory(await loadHistory(deviceId))
-  }, [deviceId])
+    const requestId = historyRequestId.current + 1
+    historyRequestId.current = requestId
+    setHistoryLoading(true)
+    setHistoryError(null)
+    const { from, to } = getHistoryBounds(historyQuery.range)
+
+    try {
+      const response = await getTelemetryHistory({
+        deviceId,
+        bucket: historyQuery.bucket,
+        from,
+        to,
+        limit: 1_000,
+        order: 'asc',
+      })
+      if (requestId === historyRequestId.current) {
+        setHistory(response)
+      }
+    } catch (loadError) {
+      if (requestId === historyRequestId.current) {
+        setHistoryError(getErrorMessage(loadError))
+      }
+    } finally {
+      if (requestId === historyRequestId.current) {
+        setHistoryLoading(false)
+      }
+    }
+  }, [deviceId, historyQuery])
+
+  const updateHistoryQuery = useCallback((query: HistoryQuery) => {
+    historyRequestId.current += 1
+    setHistory(null)
+    setHistoryError(null)
+    setHistoryLoading(true)
+    setHistoryQuery(query)
+  }, [])
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
@@ -259,14 +279,9 @@ export function useGreenhouseDashboard({
     }
 
     connect()
-    const historyTimer = window.setInterval(() => {
-      void refreshHistory().catch(() => undefined)
-    }, historyRefreshMs)
-
     return () => {
       stopped = true
       stopPolling()
-      window.clearInterval(historyTimer)
 
       if (reconnectTimer !== null) {
         window.clearTimeout(reconnectTimer)
@@ -274,7 +289,25 @@ export function useGreenhouseDashboard({
 
       socket?.close()
     }
-  }, [deviceId, enabled, refreshHistory, refreshSnapshot, status])
+  }, [deviceId, enabled, refreshSnapshot, status])
+
+  useEffect(() => {
+    if (!enabled || status !== 'ready') {
+      return
+    }
+
+    const initialHistoryTimer = window.setTimeout(() => {
+      void refreshHistory()
+    }, 0)
+    const historyTimer = window.setInterval(() => {
+      void refreshHistory()
+    }, historyRefreshMs)
+
+    return () => {
+      window.clearTimeout(initialHistoryTimer)
+      window.clearInterval(historyTimer)
+    }
+  }, [enabled, refreshHistory, status])
 
   const sendCommand = useCallback(async (request: CommandRequest) => {
     const accepted = await postCommand(request)
@@ -282,15 +315,19 @@ export function useGreenhouseDashboard({
     setCommands((current) => [pending, ...current])
   }, [])
 
+  const publishConfig = useCallback(async (nextConfig: DeviceConfig): Promise<ConfigPublished> => {
+    const published = await postDeviceConfig(deviceId, nextConfig)
+    setConfig(published.config)
+    return published
+  }, [deviceId])
+
   const publishMode = useCallback(async (mode: ControlMode): Promise<ConfigPublished> => {
     if (!config) {
       throw new Error('Chưa tải được cấu hình thiết bị.')
     }
 
-    const published = await postDeviceConfig(deviceId, withMode(config, mode))
-    setConfig(published.config)
-    return published
-  }, [config, deviceId])
+    return publishConfig(withMode(config, mode))
+  }, [config, publishConfig])
 
   return {
     status,
@@ -299,11 +336,17 @@ export function useGreenhouseDashboard({
     telemetry,
     deviceState,
     history,
+    historyQuery,
+    historyLoading,
+    historyError,
     config,
     commands,
     alerts,
     retry: loadInitial,
     sendCommand,
+    publishConfig,
     publishMode,
+    refreshHistory,
+    updateHistoryQuery,
   }
 }

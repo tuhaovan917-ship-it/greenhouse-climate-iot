@@ -14,26 +14,28 @@ Các milestone Overview, biểu đồ lịch sử và control flow đã có:
 
 - Scaffold React + Vite + TypeScript và giao diện sáng/tối bằng Tailwind CSS.
 - TypeScript types cho REST/WebSocket, bao gồm response union riêng cho telemetry raw/bucket.
-- Mock data cho trạng thái bình thường, offline, hết nước và lỗi cảm biến.
+- Fixture kiểm thử cho trạng thái bình thường, offline, hết nước và lỗi cảm biến; runtime chỉ dùng dữ liệu Backend thật.
 - Màn Overview responsive: sensor cards, kết nối, mode, failsafe và actuator state.
 - Chế độ sáng/tối có switch trên header, mặc định theo hệ điều hành và ghi nhớ lựa chọn trong trình duyệt.
 - Biểu đồ lịch sử responsive bằng Recharts cho nhiệt độ, độ ẩm và ánh sáng.
-- Bộ chọn độ phân giải `raw|1m|5m|1h`, sắp xếp điểm theo thời gian và giữ khoảng trống cho giá trị `null`.
-- Empty state cho bucket chưa có dữ liệu và mock history theo đúng envelope `{ bucket, data }`.
+- Bộ chọn khoảng `15m|1h|6h|24h` và độ phân giải `raw|1m|5m|1h`; mỗi lần đổi chỉ request bucket đang xem với `from/to` thật.
+- Bucket không phù hợp với khoảng rộng bị khóa để tránh vượt giới hạn scan và response của Backend.
+- Empty state cho bucket chưa có dữ liệu và fixture history theo đúng envelope `{ bucket, data }`.
 - Unit test cho dữ liệu hợp lệ, trường `null`, `waterOk=false`, `waterOk=null` và offline.
 - Unit test cho bucket mặc định, chuyển sang raw, ba biểu đồ và empty state.
 - Khu vực điều khiển từ xa chỉ mở khi trạng thái thực tế là `MANUAL` và thiết bị online.
 - Luồng lệnh theo `commandId`: `PENDING → APPLIED|REJECTED|TIMEOUT`, hiển thị lý do và phản hồi trễ.
 - Không optimistic update actuator, không tự gửi lại sau timeout và chống xử lý thừa message QoS 1 trùng kết quả.
 - Khóa bơm khi `waterOk=false|null`; `POST /config` chỉ hiển thị `PUBLISHED` và tiếp tục chờ mode thực tế từ ESP32.
+- Form cấu hình đủ sáu ngưỡng hysteresis, validate cùng quy tắc Backend trước khi publish.
 - Khu vực cảnh báo tách rõ cảnh báo đang hoạt động và lịch sử đã xử lý, hiển thị severity, code và thời gian.
 - Empty state khi hệ thống an toàn; cấu trúc sẵn sàng khôi phục lịch sử từ `GET /api/alerts` sau reload/reconnect.
 - REST client đã tích hợp telemetry/state/history/config/commands/alerts theo contract Backend v0.2.5.
+- Dashboard chạy live-only qua REST/WebSocket; không còn chế độ dữ liệu mô phỏng trong runtime.
 - Hệ thống mới chưa có telemetry vẫn vào trạng thái ready: sensor hiển thị chưa có dữ liệu, không đổi thành 0 và bơm tiếp tục bị khóa an toàn.
+- Dữ liệu quá 10 giây được đánh dấu chậm cập nhật nhưng Dashboard không tự suy ra offline; `online` vẫn do Backend quyết định.
 - Một WebSocket duy nhất nhận telemetry/state/command_result/alert, bỏ qua heartbeat `ping` do server gửi, tự reconnect và fallback polling 5 giây.
 - Khi reconnect, Dashboard tải lại latest telemetry, state và lịch sử cảnh báo; biểu đồ được đồng bộ lại định kỳ.
-
-Phần chọn khoảng `from/to` thuộc milestone tiếp theo.
 
 ## 2. Phạm vi Dashboard v0.1
 
@@ -146,6 +148,7 @@ dashboard/
 │   │   ├── control/
 │   │   └── alerts/
 │   ├── hooks/
+│   ├── test/         # Fixture chỉ dùng cho unit test, không vào runtime
 │   ├── types/        # TypeScript types khớp API contract
 │   ├── utils/
 │   └── main.tsx
@@ -161,12 +164,9 @@ UI dùng Tailwind CSS; biểu đồ lịch sử dùng Recharts.
 VITE_API_BASE_URL=http://localhost:8000
 VITE_WS_URL=ws://localhost:8000/ws
 VITE_DEVICE_ID=greenhouse-01
-VITE_DATA_SOURCE=mock
 # Chỉ đặt khi Backend chạy trên LAN và bật API key
 VITE_API_KEY=
 ```
-
-Đặt `VITE_DATA_SOURCE=live` để kết nối Backend thật. Giữ `mock` để chạy và review giao diện độc lập.
 
 Chỉ commit `.env.example`. Không commit `.env` hoặc thông tin bí mật.
 
@@ -182,11 +182,12 @@ Chỉ commit `.env.example`. Không commit `.env` hoặc thông tin bí mật.
 - Hiển thị đúng `REJECTED/NO_WATER` và không bật giả trạng thái bơm.
 - Phân biệt `waterOk=false` (`NO_WATER`) với `waterOk=null` (`SENSOR_FAULT`).
 - Reload trang vẫn tải được lịch sử cảnh báo qua REST.
-- Kiểm thử tích hợp bằng `demo_esp32_mock.py` khi Backend cung cấp.
+- Kiểm thử tích hợp bằng hardware simulator `backend/demo_esp32_mock.py`, sau đó kiểm tra với ESP32 thật.
 
 ## 11. Chạy Dashboard local
 
 Yêu cầu Node.js `22.22.2+` và npm. Có thể dùng phiên bản được ghi trong `.nvmrc`.
+Backend phải chạy trước tại URL được cấu hình trong `.env`.
 
 ```bash
 cd dashboard

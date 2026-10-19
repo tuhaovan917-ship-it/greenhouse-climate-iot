@@ -8,16 +8,27 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { ChartNoAxesCombined, CircleAlert } from 'lucide-react'
-import type { Bucket, TelemetryHistoryByBucket, TelemetryHistoryResponse } from '../../types/api'
+import { ChartNoAxesCombined, CircleAlert, LoaderCircle, RefreshCw } from 'lucide-react'
+import type { Bucket, TelemetryHistoryResponse } from '../../types/api'
 import { formatMeasurement } from '../../utils/formatters'
+import {
+  defaultHistoryQuery,
+  isBucketAllowed,
+  normalizeHistoryQuery,
+  type HistoryQuery,
+  type HistoryRange,
+} from './historyQuery'
 import {
   normalizeTelemetryHistory,
   type ChartPoint,
 } from './historyTransform'
 
 interface TelemetryHistoryPanelProps {
-  history: TelemetryHistoryByBucket
+  history: TelemetryHistoryResponse | null
+  loading: boolean
+  error: string | null
+  onQueryChange: (query: HistoryQuery) => void
+  onRetry: () => void
 }
 
 interface MetricChartProps {
@@ -33,6 +44,13 @@ const bucketOptions: Array<{ value: Bucket; label: string; description: string }
   { value: '1m', label: '1 phút', description: 'Trung bình mỗi phút' },
   { value: '5m', label: '5 phút', description: 'Trung bình mỗi 5 phút' },
   { value: '1h', label: '1 giờ', description: 'Trung bình mỗi giờ' },
+]
+
+const rangeOptions: Array<{ value: HistoryRange; label: string }> = [
+  { value: '15m', label: '15 phút' },
+  { value: '1h', label: '1 giờ' },
+  { value: '6h', label: '6 giờ' },
+  { value: '24h', label: '24 giờ' },
 ]
 
 const axisTimeFormatter = new Intl.DateTimeFormat('vi-VN', {
@@ -129,13 +147,31 @@ function MetricChart({ data, dataKey, title, unit, color }: MetricChartProps) {
   )
 }
 
-export function TelemetryHistoryPanel({ history }: TelemetryHistoryPanelProps) {
-  const [selectedBucket, setSelectedBucket] = useState<Bucket>('5m')
-  const selectedHistory = history[selectedBucket] as TelemetryHistoryResponse
-  const points = useMemo(() => normalizeTelemetryHistory(selectedHistory), [selectedHistory])
+export function TelemetryHistoryPanel({
+  history,
+  loading,
+  error,
+  onQueryChange,
+  onRetry,
+}: TelemetryHistoryPanelProps) {
+  const [query, setQuery] = useState<HistoryQuery>(defaultHistoryQuery)
+  const points = useMemo(
+    () => history && history.bucket === query.bucket
+      ? normalizeTelemetryHistory(history)
+      : [],
+    [history, query.bucket],
+  )
+  const selectedBucket = query.bucket
   const selectedOption = bucketOptions.find((option) => option.value === selectedBucket)
+  const selectedRange = rangeOptions.find((option) => option.value === query.range)
   const firstTimestamp = points.at(0)?.timestampMs
   const lastTimestamp = points.at(-1)?.timestampMs
+
+  function changeQuery(nextQuery: HistoryQuery) {
+    const normalized = normalizeHistoryQuery(nextQuery)
+    setQuery(normalized)
+    onQueryChange(normalized)
+  }
 
   return (
     <section aria-labelledby="history-heading" className="pb-8" id="history">
@@ -150,46 +186,114 @@ export function TelemetryHistoryPanel({ history }: TelemetryHistoryPanelProps) {
               Lịch sử môi trường
             </h2>
             <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-slate-400">
-              {points.length > 0 && firstTimestamp !== undefined && lastTimestamp !== undefined
+              {loading
+                ? `Đang tải ${selectedRange?.label.toLocaleLowerCase('vi-VN') ?? ''}`
+                : points.length > 0 && firstTimestamp !== undefined && lastTimestamp !== undefined
                 ? `${points.length} điểm · ${fullTimeFormatter.format(new Date(firstTimestamp))} – ${fullTimeFormatter.format(new Date(lastTimestamp))}`
                 : 'Chưa có dữ liệu trong khoảng thời gian này'}
             </p>
           </div>
 
-          <div>
-            <p className="mb-2 text-[0.65rem] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-              Độ phân giải
-            </p>
-            <div
-              aria-label="Chọn độ phân giải biểu đồ"
-              className="inline-flex flex-wrap gap-1 rounded-xl border border-slate-200/80 bg-slate-100/80 p-1 dark:border-white/[0.07] dark:bg-black/20"
-              role="group"
-            >
-              {bucketOptions.map((option) => {
-                const selected = option.value === selectedBucket
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <div>
+              <p className="mb-2 text-[0.65rem] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                Khoảng thời gian
+              </p>
+              <div
+                aria-label="Chọn khoảng thời gian biểu đồ"
+                className="inline-flex flex-wrap gap-1 rounded-xl border border-slate-200/80 bg-slate-100/80 p-1 dark:border-white/[0.07] dark:bg-black/20"
+                role="group"
+              >
+                {rangeOptions.map((option) => {
+                  const selected = option.value === query.range
 
-                return (
-                  <button
-                    aria-label={`Xem ${option.description.toLocaleLowerCase('vi-VN')}`}
-                    aria-pressed={selected}
-                    className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 ${
-                      selected
-                        ? 'bg-white text-emerald-800 shadow-sm dark:bg-emerald-400/15 dark:text-emerald-200 dark:shadow-none'
-                        : 'text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.04] dark:hover:text-slate-100'
-                    }`}
-                    key={option.value}
-                    onClick={() => setSelectedBucket(option.value)}
-                    type="button"
-                  >
-                    {option.label}
-                  </button>
-                )
-              })}
+                  return (
+                    <button
+                      aria-pressed={selected}
+                      className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 ${
+                        selected
+                          ? 'bg-white text-emerald-800 shadow-sm dark:bg-emerald-400/15 dark:text-emerald-200 dark:shadow-none'
+                          : 'text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.04] dark:hover:text-slate-100'
+                      }`}
+                      key={option.value}
+                      onClick={() => changeQuery({ ...query, range: option.value })}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[0.65rem] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                Độ phân giải
+              </p>
+              <div
+                aria-label="Chọn độ phân giải biểu đồ"
+                className="inline-flex flex-wrap gap-1 rounded-xl border border-slate-200/80 bg-slate-100/80 p-1 dark:border-white/[0.07] dark:bg-black/20"
+                role="group"
+              >
+                {bucketOptions.map((option) => {
+                  const selected = option.value === selectedBucket
+                  const allowed = isBucketAllowed(query.range, option.value)
+
+                  return (
+                    <button
+                      aria-label={`Xem ${option.description.toLocaleLowerCase('vi-VN')}`}
+                      aria-pressed={selected}
+                      className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:cursor-not-allowed disabled:opacity-40 ${
+                        selected
+                          ? 'bg-white text-emerald-800 shadow-sm dark:bg-emerald-400/15 dark:text-emerald-200 dark:shadow-none'
+                          : 'text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.04] dark:hover:text-slate-100'
+                      }`}
+                      disabled={!allowed}
+                      key={option.value}
+                      onClick={() => changeQuery({ ...query, bucket: option.value })}
+                      title={allowed ? undefined : 'Khoảng thời gian này cần bucket lớn hơn để tránh tải quá nhiều dữ liệu'}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
         </div>
 
-        {points.length > 0 ? (
+        {loading ? (
+          <div className="grid min-h-72 place-items-center py-12 text-center" role="status">
+            <div>
+              <LoaderCircle aria-hidden="true" className="mx-auto h-7 w-7 animate-spin text-emerald-700 dark:text-emerald-300" />
+              <p className="mt-4 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                Đang tải dữ liệu lịch sử
+              </p>
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                {selectedRange?.label} · {selectedOption?.description}
+              </p>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="grid min-h-72 place-items-center py-12 text-center" role="alert">
+            <div className="max-w-md">
+              <CircleAlert aria-hidden="true" className="mx-auto h-8 w-8 text-red-600 dark:text-red-300" />
+              <p className="mt-4 text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Không tải được dữ liệu lịch sử
+              </p>
+              <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-slate-400">{error}</p>
+              <button
+                className="mx-auto mt-5 flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-emerald-300 dark:text-emerald-950 dark:hover:bg-emerald-200"
+                onClick={onRetry}
+                type="button"
+              >
+                <RefreshCw aria-hidden="true" className="h-4 w-4" />
+                Thử tải lại
+              </button>
+            </div>
+          </div>
+        ) : points.length > 0 ? (
           <>
             <div className="mt-6 grid gap-4 xl:grid-cols-3">
               <MetricChart
@@ -218,7 +322,7 @@ export function TelemetryHistoryPanel({ history }: TelemetryHistoryPanelProps) {
             <div className="mt-4 flex items-start gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 text-xs leading-5 text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
               <CircleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />
               <p>
-                Đang xem <span className="font-semibold text-slate-800 dark:text-slate-300">{selectedOption?.description}</span>.
+                Đang xem <span className="font-semibold text-slate-800 dark:text-slate-300">{selectedRange?.label} · {selectedOption?.description}</span>.
                 Khoảng trống trên đường biểu diễn là giá trị cảm biến <code>null</code>, không được đổi thành 0.
               </p>
             </div>

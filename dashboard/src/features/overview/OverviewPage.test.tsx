@@ -1,23 +1,22 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import {
-  mockDeviceState,
-  mockNoWaterTelemetry,
-  mockOfflineState,
-  mockSensorFaultTelemetry,
-  mockTelemetry,
-  mockTelemetryHistoryByBucket,
-} from '../../mocks/greenhouse'
+  fixtureDeviceState,
+  fixtureNoWaterTelemetry,
+  fixtureOfflineState,
+  fixtureSensorFaultTelemetry,
+  fixtureTelemetry,
+  fixtureTelemetryHistoryByBucket,
+} from '../../test/fixtures'
 import { OverviewPage } from './OverviewPage'
 
 describe('OverviewPage', () => {
   it('hiển thị các chỉ số và trạng thái thực tế từ dữ liệu mới nhất', () => {
     render(
       <OverviewPage
-        telemetry={mockTelemetry}
-        deviceState={mockDeviceState}
-        history={mockTelemetryHistoryByBucket}
-        dataSource="mock"
+        telemetry={fixtureTelemetry}
+        deviceState={fixtureDeviceState}
+        history={fixtureTelemetryHistoryByBucket['5m']}
       />,
     )
 
@@ -26,16 +25,14 @@ describe('OverviewPage', () => {
     expect(screen.getByLabelText('Độ ẩm không khí: 67,4 %')).toBeInTheDocument()
     expect(screen.getByLabelText('Nguồn nước: Đủ nước')).toBeInTheDocument()
     expect(screen.getByText('ĐANG BẬT')).toBeInTheDocument()
-    expect(screen.getByText('Dữ liệu mô phỏng')).toBeInTheDocument()
   })
 
   it('không chuyển giá trị cảm biến null thành 0', () => {
     render(
       <OverviewPage
-        telemetry={mockSensorFaultTelemetry}
-        deviceState={mockDeviceState}
-        history={mockTelemetryHistoryByBucket}
-        dataSource="mock"
+        telemetry={fixtureSensorFaultTelemetry}
+        deviceState={fixtureDeviceState}
+        history={fixtureTelemetryHistoryByBucket['5m']}
       />,
     )
 
@@ -48,9 +45,8 @@ describe('OverviewPage', () => {
     render(
       <OverviewPage
         telemetry={null}
-        deviceState={{ ...mockOfflineState, updatedAt: null }}
-        history={mockTelemetryHistoryByBucket}
-        dataSource="live"
+        deviceState={{ ...fixtureOfflineState, updatedAt: null }}
+        history={fixtureTelemetryHistoryByBucket['5m']}
       />,
     )
 
@@ -63,10 +59,9 @@ describe('OverviewPage', () => {
   it('phân biệt hết nước với lỗi cảm biến nước', () => {
     render(
       <OverviewPage
-        telemetry={mockNoWaterTelemetry}
-        deviceState={{ ...mockDeviceState, failsafeActive: true, mist: false }}
-        history={mockTelemetryHistoryByBucket}
-        dataSource="mock"
+        telemetry={fixtureNoWaterTelemetry}
+        deviceState={{ ...fixtureDeviceState, failsafeActive: true, mist: false }}
+        history={fixtureTelemetryHistoryByBucket['5m']}
       />,
     )
 
@@ -78,10 +73,9 @@ describe('OverviewPage', () => {
   it('hiển thị trạng thái offline do Backend cung cấp', () => {
     render(
       <OverviewPage
-        telemetry={mockTelemetry}
-        deviceState={mockOfflineState}
-        history={mockTelemetryHistoryByBucket}
-        dataSource="mock"
+        telemetry={fixtureTelemetry}
+        deviceState={fixtureOfflineState}
+        history={fixtureTelemetryHistoryByBucket['5m']}
       />,
     )
 

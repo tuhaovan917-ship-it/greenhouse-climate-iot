@@ -11,7 +11,7 @@ import {
   TimerOff,
   XCircle,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { StatusBadge } from '../../components/StatusBadge'
 import type {
   CommandActivity,
@@ -32,7 +32,11 @@ interface ControlPanelProps {
   commands: CommandActivity[]
   onSendCommand: (request: CommandRequest) => Promise<void>
   onPublishMode: (mode: ControlMode) => Promise<ConfigPublished>
+  onPublishConfig: (config: DeviceConfig) => Promise<ConfigPublished>
 }
+
+type ThresholdKey = Exclude<keyof DeviceConfig, 'mode'>
+type ThresholdDraft = Record<ThresholdKey, string>
 
 const deviceMeta: Record<
   DeviceName,
@@ -76,6 +80,77 @@ const reasonLabels: Record<string, string> = {
   DEVICE_OFFLINE: 'Thiết bị đang ngoại tuyến',
   MQTT_NOT_CONNECTED: 'Backend chưa kết nối MQTT',
   TIMEOUT: 'Không nhận được phản hồi sau thời hạn',
+}
+
+const thresholdFields: Array<{
+  key: ThresholdKey
+  label: string
+  unit: string
+  step: number
+  min?: number
+  max?: number
+}> = [
+  { key: 'tempOnC', label: 'Bật quạt khi nhiệt độ', unit: '°C', step: 0.1 },
+  { key: 'tempOffC', label: 'Tắt quạt khi nhiệt độ', unit: '°C', step: 0.1 },
+  { key: 'humidityOnPct', label: 'Bật phun khi độ ẩm', unit: '%', step: 0.1, min: 0, max: 100 },
+  { key: 'humidityOffPct', label: 'Tắt phun khi độ ẩm', unit: '%', step: 0.1, min: 0, max: 100 },
+  { key: 'lightOnLux', label: 'Bật đèn khi ánh sáng', unit: 'lux', step: 1, min: 0 },
+  { key: 'lightOffLux', label: 'Tắt đèn khi ánh sáng', unit: 'lux', step: 1, min: 0 },
+]
+
+function configToDraft(config: DeviceConfig): ThresholdDraft {
+  return {
+    tempOnC: String(config.tempOnC),
+    tempOffC: String(config.tempOffC),
+    humidityOnPct: String(config.humidityOnPct),
+    humidityOffPct: String(config.humidityOffPct),
+    lightOnLux: String(config.lightOnLux),
+    lightOffLux: String(config.lightOffLux),
+  }
+}
+
+function parseThresholdDraft(draft: ThresholdDraft, mode: ControlMode) {
+  if (Object.values(draft).some((value) => value.trim() === '')) {
+    return { error: 'Không được để trống ngưỡng cấu hình.', config: null }
+  }
+
+  const parsed = Object.fromEntries(
+    Object.entries(draft).map(([key, value]) => [key, Number(value)]),
+  ) as Record<ThresholdKey, number>
+
+  if (Object.values(parsed).some((value) => !Number.isFinite(value))) {
+    return { error: 'Các ngưỡng phải là số hợp lệ.', config: null }
+  }
+
+  if (parsed.tempOnC <= parsed.tempOffC) {
+    return { error: 'Ngưỡng bật quạt phải lớn hơn ngưỡng tắt quạt.', config: null }
+  }
+
+  if (parsed.humidityOnPct >= parsed.humidityOffPct) {
+    return { error: 'Ngưỡng bật phun phải nhỏ hơn ngưỡng tắt phun.', config: null }
+  }
+
+  if (
+    parsed.humidityOnPct < 0 ||
+    parsed.humidityOnPct > 100 ||
+    parsed.humidityOffPct < 0 ||
+    parsed.humidityOffPct > 100
+  ) {
+    return { error: 'Ngưỡng độ ẩm phải nằm trong khoảng 0–100%.', config: null }
+  }
+
+  if (parsed.lightOnLux >= parsed.lightOffLux) {
+    return { error: 'Ngưỡng bật đèn phải nhỏ hơn ngưỡng tắt đèn.', config: null }
+  }
+
+  if (parsed.lightOnLux < 0 || parsed.lightOffLux < 0) {
+    return { error: 'Ngưỡng ánh sáng không được âm.', config: null }
+  }
+
+  return {
+    error: null,
+    config: { mode, ...parsed } satisfies DeviceConfig,
+  }
 }
 
 function getBlockReason(
@@ -132,9 +207,12 @@ export function ControlPanel({
   commands,
   onSendCommand,
   onPublishMode,
+  onPublishConfig,
 }: ControlPanelProps) {
   const [submittingDevice, setSubmittingDevice] = useState<DeviceName | null>(null)
   const [publishingMode, setPublishingMode] = useState(false)
+  const [publishingThresholds, setPublishingThresholds] = useState(false)
+  const [thresholdDraft, setThresholdDraft] = useState<ThresholdDraft>(() => configToDraft(config))
   const [modeNotice, setModeNotice] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const awaitingModeConfirmation = config.mode !== deviceState.mode
@@ -188,6 +266,29 @@ export function ControlPanel({
       setErrorMessage(error instanceof Error ? error.message : 'Không thể publish cấu hình')
     } finally {
       setPublishingMode(false)
+    }
+  }
+
+  async function handleThresholdSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setModeNotice(null)
+    setErrorMessage(null)
+
+    const parsed = parseThresholdDraft(thresholdDraft, config.mode)
+    if (parsed.error || !parsed.config) {
+      setErrorMessage(parsed.error ?? 'Cấu hình ngưỡng không hợp lệ.')
+      return
+    }
+
+    setPublishingThresholds(true)
+    try {
+      const response = await onPublishConfig(parsed.config)
+      setThresholdDraft(configToDraft(response.config))
+      setModeNotice('Đã publish các ngưỡng mới. Firmware chưa có configId nên Dashboard chưa thể xác nhận đã áp dụng.')
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Không thể publish cấu hình ngưỡng')
+    } finally {
+      setPublishingThresholds(false)
     }
   }
 
@@ -246,6 +347,79 @@ export function ControlPanel({
             <p>{errorMessage}</p>
           </div>
         ) : null}
+
+        <form
+          className="border-b border-slate-200/80 p-5 dark:border-white/[0.07] sm:p-6"
+          onSubmit={handleThresholdSubmit}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="eyebrow">Cấu hình tự động</p>
+              <h3 className="mt-2 text-base font-semibold text-slate-950 dark:text-white">
+                Ngưỡng hysteresis
+              </h3>
+              <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-600 dark:text-slate-400">
+                Các cặp bật/tắt tách nhau để tránh thiết bị chuyển trạng thái liên tục quanh một ngưỡng.
+              </p>
+            </div>
+            <StatusBadge tone={deviceState.online ? 'neutral' : 'critical'}>
+              {deviceState.online ? 'Sẵn sàng publish' : 'Thiết bị ngoại tuyến'}
+            </StatusBadge>
+          </div>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {thresholdFields.map((field) => (
+              <label className="block" key={field.key}>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  {field.label}
+                </span>
+                <span className="mt-2 flex items-center overflow-hidden rounded-xl border border-slate-300 bg-white/75 focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-600/15 dark:border-white/10 dark:bg-black/20 dark:focus-within:border-emerald-300">
+                  <input
+                    aria-label={field.label}
+                    className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm font-semibold text-slate-950 outline-none dark:text-white"
+                    inputMode="decimal"
+                    max={field.max}
+                    min={field.min}
+                    onChange={(event) => setThresholdDraft((current) => ({
+                      ...current,
+                      [field.key]: event.target.value,
+                    }))}
+                    step={field.step}
+                    type="number"
+                    value={thresholdDraft[field.key]}
+                  />
+                  <span className="border-l border-slate-200 px-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
+                    {field.unit}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+            <button
+              className="rounded-xl border border-slate-300 bg-white/70 px-4 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.07]"
+              disabled={publishingThresholds}
+              onClick={() => {
+                setThresholdDraft(configToDraft(config))
+                setErrorMessage(null)
+              }}
+              type="button"
+            >
+              Khôi phục giá trị đã lưu
+            </button>
+            <button
+              className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 dark:bg-emerald-300 dark:text-emerald-950 dark:hover:bg-emerald-200 dark:disabled:bg-white/[0.06] dark:disabled:text-slate-500"
+              disabled={!deviceState.online || publishingThresholds}
+              type="submit"
+            >
+              {publishingThresholds ? (
+                <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />
+              ) : null}
+              {publishingThresholds ? 'Đang publish' : 'Publish ngưỡng mới'}
+            </button>
+          </div>
+        </form>
 
         <div className="grid gap-4 p-5 sm:p-6 lg:grid-cols-3">
           {(Object.keys(deviceMeta) as DeviceName[]).map((device) => {
