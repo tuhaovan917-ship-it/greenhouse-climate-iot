@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandActivity } from '../../types/api'
-import { createPendingCommand, mergeCommandResult } from './commandState'
+import {
+  createPendingCommand,
+  mergeCommandResult,
+  reconcileCommandSnapshot,
+} from './commandState'
 
 const pendingCommand: CommandActivity = {
   commandId: 'cmd-1',
@@ -70,5 +74,56 @@ describe('commandState', () => {
 
     expect(unchanged).toBe(commands)
     expect(unchanged[0].completedAt).toBe('2026-10-19T10:00:01Z')
+  })
+
+  it('đồng bộ PENDING thành kết quả cuối từ REST', () => {
+    const updated = reconcileCommandSnapshot([pendingCommand], [
+      {
+        ...pendingCommand,
+        status: 'APPLIED',
+        completedAt: '2026-10-19T10:00:02Z',
+      },
+    ])
+
+    expect(updated[0]).toMatchObject({
+      commandId: pendingCommand.commandId,
+      status: 'APPLIED',
+      completedAt: '2026-10-19T10:00:02Z',
+    })
+  })
+
+  it('không để REST PENDING cũ ghi đè kết quả WebSocket', () => {
+    const applied: CommandActivity = {
+      ...pendingCommand,
+      status: 'APPLIED',
+      completedAt: '2026-10-19T10:00:02Z',
+    }
+
+    const updated = reconcileCommandSnapshot([applied], [pendingCommand])
+
+    expect(updated[0]).toBe(applied)
+  })
+
+  it('nhận biết phản hồi thực tế đến sau TIMEOUT khi đồng bộ REST', () => {
+    const timedOut: CommandActivity = {
+      ...pendingCommand,
+      status: 'TIMEOUT',
+      completedAt: '2026-10-19T10:00:05Z',
+    }
+
+    const updated = reconcileCommandSnapshot([timedOut], [
+      {
+        ...pendingCommand,
+        status: 'REJECTED',
+        reason: 'NO_WATER',
+        completedAt: '2026-10-19T10:00:07Z',
+      },
+    ])
+
+    expect(updated[0]).toMatchObject({
+      status: 'REJECTED',
+      reason: 'NO_WATER',
+      wasLate: true,
+    })
   })
 })

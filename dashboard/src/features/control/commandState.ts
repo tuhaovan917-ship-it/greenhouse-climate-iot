@@ -1,9 +1,43 @@
 import type {
   CommandAccepted,
   CommandActivity,
+  CommandLog,
   CommandRequest,
   CommandResultData,
 } from '../../types/api'
+
+function isTerminal(command: CommandActivity) {
+  return command.status !== 'PENDING'
+}
+
+function completionTime(command: CommandActivity) {
+  return command.completedAt ? Date.parse(command.completedAt) : 0
+}
+
+function reconcileCommand(
+  current: CommandActivity,
+  incoming: CommandLog,
+): CommandActivity {
+  if (isTerminal(current) && incoming.status === 'PENDING') {
+    return current
+  }
+
+  if (
+    isTerminal(current) &&
+    incoming.status !== 'PENDING' &&
+    completionTime(current) > completionTime(incoming)
+  ) {
+    return current
+  }
+
+  return {
+    ...incoming,
+    wasLate:
+      current.wasLate === true ||
+      (current.status === 'TIMEOUT' &&
+        (incoming.status === 'APPLIED' || incoming.status === 'REJECTED')),
+  }
+}
 
 export function createPendingCommand(
   request: CommandRequest,
@@ -56,4 +90,22 @@ export function mergeCommandResult(
   })
 
   return changed ? nextCommands : commands
+}
+
+export function reconcileCommandSnapshot(
+  commands: CommandActivity[],
+  incoming: CommandLog[],
+): CommandActivity[] {
+  const currentById = new Map(
+    commands.map((command) => [command.commandId, command]),
+  )
+  const reconciled = incoming.map((command) => {
+    const current = currentById.get(command.commandId)
+    currentById.delete(command.commandId)
+    return current ? reconcileCommand(current, command) : command
+  })
+
+  return [...reconciled, ...currentById.values()].sort(
+    (left, right) => Date.parse(right.requestedAt) - Date.parse(left.requestedAt),
+  )
 }

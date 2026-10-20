@@ -11,7 +11,11 @@ import {
   withMode,
 } from '../api/greenhouseApi'
 import { dashboardConfig } from '../api/config'
-import { createPendingCommand, mergeCommandResult } from '../features/control/commandState'
+import {
+  createPendingCommand,
+  mergeCommandResult,
+  reconcileCommandSnapshot,
+} from '../features/control/commandState'
 import {
   defaultHistoryQuery,
   getHistoryBounds,
@@ -27,6 +31,7 @@ import type {
   DeviceState,
   Telemetry,
   TelemetryHistoryResponse,
+  CommandResultData,
   WsMessage,
 } from '../types/api'
 
@@ -39,8 +44,15 @@ interface UseGreenhouseDashboardOptions {
 }
 
 const pollingIntervalMs = 5_000
+const pendingCommandSyncMs = 1_000
 const reconnectDelayMs = 3_000
 const historyRefreshMs = 30_000
+const maxBufferedCommandResults = 100
+
+interface BufferedCommandResult {
+  data: CommandResultData
+  receivedAt: string
+}
 
 function upsertAlert(current: Alert[], incoming: Alert) {
   return [incoming, ...current.filter((alert) => alert.id !== incoming.id)]
@@ -86,6 +98,18 @@ export function useGreenhouseDashboard({
   const [commands, setCommands] = useState<CommandActivity[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const historyRequestId = useRef(0)
+  const knownCommandIds = useRef(new Set<string>())
+  const bufferedCommandResults = useRef(new Map<string, BufferedCommandResult>())
+
+  const reconcileCommands = useCallback((incoming: CommandActivity[]) => {
+    incoming.forEach((command) => knownCommandIds.current.add(command.commandId))
+    setCommands((current) => reconcileCommandSnapshot(current, incoming))
+  }, [])
+
+  const refreshCommands = useCallback(async () => {
+    const commandList = await getCommands(deviceId)
+    reconcileCommands(commandList.data)
+  }, [deviceId, reconcileCommands])
 
   const loadInitial = useCallback(async () => {
     if (!enabled) {
@@ -113,26 +137,28 @@ export function useGreenhouseDashboard({
       setTelemetry(latestTelemetry)
       setDeviceState(latestState)
       setConfig(latestConfig)
-      setCommands(commandList.data)
+      reconcileCommands(commandList.data)
       setAlerts(alertList.data)
       setStatus('ready')
     } catch (loadError) {
       setError(getErrorMessage(loadError))
       setStatus('error')
     }
-  }, [deviceId, enabled])
+  }, [deviceId, enabled, reconcileCommands])
 
   const refreshSnapshot = useCallback(async () => {
-    const [latestTelemetry, latestState, alertList] = await Promise.all([
+    const [latestTelemetry, latestState, commandList, alertList] = await Promise.all([
       getLatestTelemetry(deviceId),
       getDeviceState(deviceId),
+      getCommands(deviceId),
       getAlerts({ deviceId }),
     ])
 
     setTelemetry(latestTelemetry)
     setDeviceState(latestState)
+    reconcileCommands(commandList.data)
     setAlerts(alertList.data)
-  }, [deviceId])
+  }, [deviceId, reconcileCommands])
 
   const refreshHistory = useCallback(async () => {
     const requestId = historyRequestId.current + 1
@@ -234,8 +260,23 @@ export function useGreenhouseDashboard({
       }
 
       if (message.type === 'command_result') {
+        const receivedAt = new Date().toISOString()
+        if (!knownCommandIds.current.has(message.data.commandId)) {
+          bufferedCommandResults.current.set(message.data.commandId, {
+            data: message.data,
+            receivedAt,
+          })
+
+          if (bufferedCommandResults.current.size > maxBufferedCommandResults) {
+            const oldestCommandId = bufferedCommandResults.current.keys().next().value
+            if (oldestCommandId) {
+              bufferedCommandResults.current.delete(oldestCommandId)
+            }
+          }
+        }
+
         setCommands((current) =>
-          mergeCommandResult(current, message.data, new Date().toISOString()),
+          mergeCommandResult(current, message.data, receivedAt),
         )
         return
       }
@@ -291,6 +332,26 @@ export function useGreenhouseDashboard({
     }
   }, [deviceId, enabled, refreshSnapshot, status])
 
+  const hasPendingCommands = commands.some((command) => command.status === 'PENDING')
+
+  useEffect(() => {
+    if (!enabled || status !== 'ready' || !hasPendingCommands) {
+      return
+    }
+
+    const initialCommandSyncTimer = window.setTimeout(() => {
+      void refreshCommands().catch(() => undefined)
+    }, 0)
+    const commandSyncTimer = window.setInterval(() => {
+      void refreshCommands().catch(() => undefined)
+    }, pendingCommandSyncMs)
+
+    return () => {
+      window.clearTimeout(initialCommandSyncTimer)
+      window.clearInterval(commandSyncTimer)
+    }
+  }, [enabled, hasPendingCommands, refreshCommands, status])
+
   useEffect(() => {
     if (!enabled || status !== 'ready') {
       return
@@ -312,7 +373,20 @@ export function useGreenhouseDashboard({
   const sendCommand = useCallback(async (request: CommandRequest) => {
     const accepted = await postCommand(request)
     const pending = createPendingCommand(request, accepted, new Date().toISOString())
-    setCommands((current) => [pending, ...current])
+    const bufferedResult = bufferedCommandResults.current.get(accepted.commandId)
+
+    knownCommandIds.current.add(accepted.commandId)
+    bufferedCommandResults.current.delete(accepted.commandId)
+    setCommands((current) => {
+      const withPending = [
+        pending,
+        ...current.filter((command) => command.commandId !== accepted.commandId),
+      ]
+
+      return bufferedResult
+        ? mergeCommandResult(withPending, bufferedResult.data, bufferedResult.receivedAt)
+        : withPending
+    })
   }, [])
 
   const publishConfig = useCallback(async (nextConfig: DeviceConfig): Promise<ConfigPublished> => {

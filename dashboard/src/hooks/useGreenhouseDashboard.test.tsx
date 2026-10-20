@@ -162,4 +162,92 @@ describe('useGreenhouseDashboard', () => {
 
     unmount()
   })
+
+  it('không bỏ mất command_result đến trước REST 202', async () => {
+    let resolveCommand: ((value: { commandId: string; status: 'PENDING' }) => void) | undefined
+    apiMocks.postCommand.mockImplementation(
+      () => new Promise((resolve) => {
+        resolveCommand = resolve
+      }),
+    )
+
+    const { result, unmount } = renderHook(() =>
+      useGreenhouseDashboard({ deviceId: 'greenhouse-01', enabled: true }),
+    )
+
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
+
+    let request: Promise<void> | undefined
+    act(() => {
+      request = result.current.sendCommand({
+        deviceId: 'greenhouse-01',
+        device: 'fan',
+        on: false,
+      })
+    })
+    act(() => {
+      FakeWebSocket.instances[0].message({
+        type: 'command_result',
+        data: {
+          commandId: 'cmd-fast',
+          result: 'APPLIED',
+          wasLate: false,
+        },
+      })
+    })
+    await act(async () => {
+      resolveCommand?.({ commandId: 'cmd-fast', status: 'PENDING' })
+      await request
+    })
+
+    await waitFor(() => expect(
+      result.current.commands.find((command) => command.commandId === 'cmd-fast'),
+    ).toMatchObject({ status: 'APPLIED', requestedOn: false }))
+
+    unmount()
+  })
+
+  it('đồng bộ lệnh PENDING với trạng thái cuối từ REST', async () => {
+    apiMocks.postCommand.mockResolvedValue({
+      commandId: 'cmd-rest-sync',
+      status: 'PENDING',
+    })
+
+    const { result, unmount } = renderHook(() =>
+      useGreenhouseDashboard({ deviceId: 'greenhouse-01', enabled: true }),
+    )
+
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    apiMocks.getCommands.mockResolvedValue({
+      data: [
+        {
+          commandId: 'cmd-rest-sync',
+          deviceId: 'greenhouse-01',
+          device: 'fan',
+          requestedOn: false,
+          status: 'APPLIED',
+          reason: null,
+          requestedAt: '2026-10-20T01:00:00Z',
+          completedAt: '2026-10-20T01:00:01Z',
+        },
+        ...fixtureCommandHistory,
+      ],
+    })
+
+    await act(async () => {
+      await result.current.sendCommand({
+        deviceId: 'greenhouse-01',
+        device: 'fan',
+        on: false,
+      })
+    })
+
+    await waitFor(() => expect(
+      result.current.commands.find((command) => command.commandId === 'cmd-rest-sync'),
+    ).toMatchObject({ status: 'APPLIED' }))
+    expect(apiMocks.getCommands.mock.calls.length).toBeGreaterThan(1)
+
+    unmount()
+  })
 })
