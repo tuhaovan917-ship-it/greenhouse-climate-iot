@@ -117,9 +117,14 @@ async def handleState(deviceId: str, payload: dict) -> None:
                 # issued elsewhere) so the Dashboard still sees the truth.
                 values["last_command_id"] = str(commandId)
                 values["last_command_result"] = str(result)
-                # Keep the last known reason: the periodic state publish often
-                # omits it, and null must not erase the failure explanation.
-                if reason is not None or current is None:
+                # The reason belongs to one command only:
+                # - a NEW commandId supersedes the previous explanation, so a
+                #   successful command clears the old failure reason;
+                # - the same commandId is a periodic republish, which usually
+                #   omits the reason, and then the known reason is kept.
+                storedCommandId = current.last_command_id if current is not None else None
+                isNewCommand = storedCommandId != str(commandId)
+                if reason is not None or isNewCommand or current is None:
                     values["reason"] = reason
 
             state = upsertDeviceState(session, deviceId, values)

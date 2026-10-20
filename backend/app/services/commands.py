@@ -180,8 +180,11 @@ class CommandService:
 
         wasLate = log.status == COMMAND_TIMEOUT
         log.status = result
-        # Only a provided reason updates the stored one; null means "no new info".
-        log.reason = reason or log.reason
+        # The reason belongs to the previous result. A new result (for example a
+        # late APPLIED reply after TIMEOUT) replaces it, and a reply without a
+        # reason clears it - otherwise the Dashboard would keep showing the
+        # reason of an older attempt.
+        log.reason = reason
         log.completed_at = utcNow()
         if wasLate:
             logger.info("late reply accepted for %s -> %s", commandId, result)

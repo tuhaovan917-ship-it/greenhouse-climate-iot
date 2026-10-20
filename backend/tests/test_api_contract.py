@@ -149,12 +149,14 @@ async def testStateUpsertAndCommandRejected() -> None:
 
 @pytest.mark.asyncio
 async def testNoWaterAlertOpensAndDeduplicates() -> None:
+    client = TestClient(app)
+    before = len(client.get("/api/alerts", params={"code": "NO_WATER"}).json()["data"])
     for _ in range(4):
         await ingest.handleTelemetry(
             "greenhouse-01",
             {"temperatureC": 30.0, "humidityPct": 55.0, "lightLux": 400, "waterOk": False},
         )
-    alerts = TestClient(app).get("/api/alerts", params={"code": "NO_WATER", "active": "true"}).json()
+    alerts = client.get("/api/alerts", params={"code": "NO_WATER", "active": "true"}).json()
     assert len(alerts["data"]) == 1, "dedup phai gom nhieu chu ky telemetry vao mot alert"
     alert = alerts["data"][0]
     assert alert["severity"] == "CRITICAL"
@@ -163,8 +165,8 @@ async def testNoWaterAlertOpensAndDeduplicates() -> None:
         "greenhouse-01",
         {"temperatureC": 30.0, "humidityPct": 55.0, "lightLux": 400, "waterOk": True},
     )
-    resolved = TestClient(app).get("/api/alerts", params={"code": "NO_WATER", "active": "false"}).json()
-    assert len(resolved["data"]) == 1
+    resolved = client.get("/api/alerts", params={"code": "NO_WATER", "active": "false"}).json()
+    assert len(resolved["data"]) == before + 1
     assert resolved["data"][0]["resolvedAt"] is not None
 
 

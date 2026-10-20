@@ -1,6 +1,6 @@
 # API Contract — Backend ↔ Dashboard (Greenhouse Climate IoT)
 
-**Version:** 0.2.5 (Dashboard tải song song 6 endpoint: `/api/state` và `/api/telemetry/latest` trả `200` với dữ liệu rỗng thay vì lỗi)
+**Version:** 0.2.6 (quy tắc `reason` của một lệnh: lệnh mới xóa lý do cũ; đã sửa theo báo cáo của Người 1)
 **Base URL (dev):** `http://localhost:8000`
 **Docs tự sinh:** `http://localhost:8000/docs` (FastAPI Swagger)
 **Liên quan:** `docs/mqtt-protocol.md` v0.1 trên nhánh `feat/esp32` (topics `greenhouse/01/*`, JSON telemetry/state/command/config); `database/SCHEMA.md` v0.2 trên nhánh `feat/dashboard` (5 bảng, index, dedup alert, severity). File này KHÔNG định nghĩa lại MQTT hay schema DB, chỉ định nghĩa REST/WS cho Dashboard React+Vite+TS.
@@ -31,6 +31,7 @@
 - Thời gian: string ISO8601 UTC, ví dụ `2026-10-15T10:00:00Z`. Backend sinh lúc nhận MQTT (`receivedAt`), lúc cập nhật state (`updatedAt`, `lastSeenAt`).
 - Số liệu: `temperatureC` (float, °C), `humidityPct` (float 0–100), `lightLux` (float ≥ 0), `waterOk` (`boolean | null`: `true` còn nước, `false` hết nước, `null` cảm biến không đáng tin). Giá trị lỗi từ ESP32 gửi `null`, **không** gửi `NaN`. Backend cũng tự chuẩn hoá: giá trị không phải số, là `NaN`/`Infinity` hoặc nằm ngoài dải vật lý (`temperatureC` -40..125, `humidityPct` 0..100, `lightLux` ≥ 0) đều được lưu thành `null` kèm log cảnh báo. Chỉ `false` mới báo `NO_WATER`; `null` báo `SENSOR_FAULT` + khóa bơm failsafe.
 - `mode`: `AUTO` | `MANUAL`. `failsafeActive`: bool, ưu tiên cao nhất, có thể ghi đè cả 2 mode.
+- **`reason` thuộc về đúng một lệnh:** khi ESP32 phản hồi lệnh mới, `reason` của lệnh cũ bị xóa (`null`) nếu lệnh mới không kèm lý do. Lệnh có `lastCommandResult: "REJECTED"` luôn đi kèm `reason` (`NO_WATER`, `NOT_MANUAL_MODE`, `INVALID_DEVICE`); lệnh `APPLIED` thì `reason` là `null`. ESP32 publish lại `state` định kỳ với **cùng** `lastCommandId` thì giữ nguyên `reason` đã biết.
 - Thứ tự ổn định: mọi list sắp xếp `receivedAt/startedAt DESC, id DESC` (thêm `id` làm khóa phụ khi timestamp trùng).
 - Lỗi REST thống nhất: `{ "detail": "..." }` kèm HTTP status chuẩn (400 validation, 404 not found). Kết quả lệnh sai mode/hết nước thể hiện ở `command_result` (`REJECTED`), không phải HTTP 500.
 - Body `POST` không phân biệt hoa thường cho `mode` (`"manual"` được chuẩn hoá thành `MANUAL`); sai kiểu hoặc sai giá trị trả 422.
@@ -245,3 +246,4 @@ Idempotency: MQTT QoS 1 có thể trùng, ESP32 de-dupe theo `commandId`. `comma
 - v0.2.3 (Backend đã triển khai, không đổi tên trường/topic): 1. `limit` lấy N mới nhất, `order` chỉ đảo thứ tự trả về; 2. vượt `MAX_SCAN_ROWS` trả 400 thay vì cắt bớt; 3. giá trị cảm biến ngoài dải vật lý → `null` kèm log; 4. `mode` trong body không phân biệt hoa thường.
 - v0.2.4 (sau review tv3): 1. `TIMEOUT` push WebSocket `command_result` (`result: "TIMEOUT"`, `reason: "TIMEOUT"`); 2. heartbeat: server ping mỗi 20s (`{"type":"ping"}`), socket không bị đóng vì Dashboard im lặng, Dashboard không cần gửi ping; 3. `app/models.py` có CheckConstraint cho `humidity_pct` (0–100) và `light_lux` (≥ 0) để Alembic sinh migration đúng `SCHEMA.md` §3; 4. `psycopg[binary]` có trong `requirements.txt` cho đường PostgreSQL.
 - v0.2.5 (tích hợp Dashboard): 1. `GET /api/telemetry/latest` trả `200` + `null` thay vì 400 khi chưa có dữ liệu; 2. `GET /api/state` trả `200` + trạng thái mặc định (`online: false`) thay vì 404 khi thiết bị chưa gửi state; 3. type `DeviceState.updatedAt` thành `string | null`. Dashboard tải 6 endpoint song song nên không endpoint nào được trả lỗi khi hệ thống còn trống.
+- v0.2.6 (sau báo cáo của Người 1 về firmware thật): 1. `reason` thuộc về đúng một lệnh — lệnh mới (`lastCommandId` khác) xóa lý do của lệnh cũ, kể cả khi lệnh mới không gửi kèm `reason`; 2. publish lại `state` với cùng `lastCommandId` vẫn giữ lý do đã biết; 3. `command_logs` cũng vậy: kết quả mới thay lý do cũ (late `APPLIED` không còn để lại `reason: "TIMEOUT"`).

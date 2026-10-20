@@ -427,11 +427,17 @@ def test_c35_command_row_created_before_publish(client: TestClient) -> None:
     """C3.5: PENDING is stored before publishing, offline writes are refused."""
     import anyio
 
-    anyio.run(lambda: ingest.handleStatus(DEVICE, {"online": False}))
-    response = client.post("/api/commands", json={"deviceId": DEVICE, "device": "fan", "on": True})
+    # A device id of its own keeps the check independent from other tests.
+    offlineDevice = "thiet-bi-offline-01"
+
+    anyio.run(lambda: ingest.handleStatus(offlineDevice, {"online": False}))
+    response = client.post(
+        "/api/commands", json={"deviceId": offlineDevice, "device": "fan", "on": True}
+    )
     assert response.status_code == 409
     # Nothing may be written when the device cannot be reached.
-    assert client.get("/api/commands").json()["data"] == []
+    rows = client.get("/api/commands", params={"deviceId": offlineDevice}).json()["data"]
+    assert rows == [], rows
 
 
 def test_c35_invalid_device_name_is_rejected(client: TestClient) -> None:
@@ -533,7 +539,9 @@ def test_c35_periodic_state_publish_keeps_reason(client: TestClient) -> None:
         "fan": False,
         "mist": False,
         "lamp": False,
-        "failsafeActive": True,
+        # No failsafe here: it would open a NO_WATER alert and couple this test
+        # to the alert count of the other test files.
+        "failsafeActive": False,
         "lastCommandId": commandId,
     }
     anyio.run(

@@ -191,6 +191,7 @@ python scripts/dashboard_replay.py http://127.0.0.1:8000  # replay dung request 
 python scripts/schema_compare.py <db>  # so schema da migrate voi models cua Backend
 python scripts/contract_types_check.py  # so type TS cua Dashboard voi contract
 python scripts/integration_check.py      # chay chung Backend + Database + thiet bi ao
+python scripts/reason_regression_check.py  # chuoi REJECTED/NO_WATER -> APPLIED
 ```
 
 `tests/test_contract_conformance.py` co mot test cho **tung dieu khoan** cua
@@ -289,8 +290,10 @@ Khong commit `.env`, database runtime (`*.db`, `*.db-wal`, `*.db-shm`) hay `cert
 - **`limit` luon lay phan moi nhat**: `order` chi quyet dinh thu tu tra ve, nen `order=asc`
   van ve duoc N mau moi nhat dung thu tu khong phai N mau cuoi cung trong khoang.
 - **PENDING chi la REST**: WebSocket `command_result` chi nhan `APPLIED|REJECTED|TIMEOUT`.
-- **`reason` khong bi xoa**: ESP32 publish lai `state` dinh ky va thuong khong kem
-  `reason`, nen Backend chi ghi de khi tin moi co `reason` - ly do tu choi duoc giu lai.
+- **`reason` thuoc ve dung mot lenh**: lenh moi (`lastCommandId` khac) xoa ly do cu
+  (kể cả khi lenh moi khong kem `reason`); ESP32 publish lai `state` voi **cung**
+  `lastCommandId` thi giu nguyen ly do da biet. Firmware bo han key `reason` khi
+  lenh moi thanh cong nen Backend phai tu xoa ly do cu.
 - **Heartbeat do server gui**: moi 20 giay Backend gui `{"type":"ping"}`; socket
   **khong** bi dong vi Dashboard im lang (trinh duyet khong gui duoc ping frame tu
   JavaScript). Client chi can bo qua type la.

@@ -54,6 +54,19 @@ def codeKeys(fileName: str, pattern: str) -> set[str]:
     return set(re.findall(r'"([A-Za-z][A-Za-z0-9]*)"\s*:', match.group(1)))
 
 
+def _firmwareSource() -> str:
+    """Firmware main.cpp from the esp32 branch (it carries the MQTT client)."""
+    result = subprocess.run(
+        ["git", "show", "origin/feat/esp32:firmware/src/main.cpp"],
+        cwd=REPO,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return ""
+    return result.stdout.decode("utf-8", errors="replace")
+
+
 def main() -> int:
     print("=== MQTT payload keys: protocol vs Backend ===")
 
@@ -104,6 +117,35 @@ def main() -> int:
         check(
             f"topic greenhouse/01/{topic} used by the Backend",
             f'f"{{self._prefix}}/{topic}"' in mqttText or f'PREFIX}}/{topic}"' in mqttText,
+        )
+
+    print()
+    print("=== 6. FIRMWARE (feat/esp32) ===")
+    firmware = _firmwareSource()
+    if not firmware:
+        check("firmware main.cpp doc duoc", False, "khong lay duoc tu origin/feat/esp32")
+    else:
+        for key in ("deviceId", "temperatureC", "humidityPct", "lightLux", "waterOk"):
+            check(
+                f"firmware publish telemetry.{key}",
+                f'doc["{key}"]' in firmware,
+            )
+        for key in ("mode", "fan", "mist", "lamp", "failsafeActive", "lastCommandId", "lastCommandResult"):
+            check(
+                f"firmware publish state.{key}",
+                f'doc["{key}"]' in firmware,
+            )
+        check(
+            "firmware publish status.online",
+            '\\"online\\":true' in firmware and '\\"online\\":false' in firmware,
+        )
+        check(
+            "firmware doc biet cach gui deviceId dinh dung",
+            'doc["deviceId"] = "greenhouse-01"' in firmware,
+        )
+        check(
+            "firmware reset reason cho lenh moi",
+            'mqttLastCommandReason = ""' in firmware,
         )
 
     print()
