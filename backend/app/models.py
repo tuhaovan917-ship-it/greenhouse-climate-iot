@@ -54,9 +54,9 @@ ALERT_SEVERITY_BY_CODE = {
 }
 
 ALERT_MESSAGES = {
-    ALERT_NO_WATER: "Bo khong co nuoc, bom phun suong bi khoa",
-    ALERT_SENSOR_FAULT: "Cam bien khong doc duoc, co the thieu cam bien loi",
-    ALERT_OFFLINE: "Thiet bi khong ket noi voi MQTT Broker",
+    ALERT_NO_WATER: "Bồn hết nước, bơm phun sương bị khóa",
+    ALERT_SENSOR_FAULT: "Cảm biến không đọc được giá trị, có thể cảm biến đã hỏng",
+    ALERT_OFFLINE: "Thiết bị không kết nối với MQTT Broker",
 }
 
 # Reason codes reported by ESP32 state messages and Backend rejections.
