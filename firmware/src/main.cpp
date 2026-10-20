@@ -288,19 +288,7 @@ void handleSerialMode() {
                 continue;
             }
 
-            if (command == "REBOOT") {
-                // Reset bang phan mem de kiem tra NVS trong cung phien Wokwi.
-                // Dua cac GPIO ve OFF truoc khi khoi dong lai.
-                digitalWrite(FAN_PIN, LOW);
-                digitalWrite(PUMP_PIN, LOW);
-                digitalWrite(GROWLIGHT_PIN, LOW);
-
-                Serial.println("[TEST] ESP.restart() - checking NVS after reboot...");
-                Serial.flush();
-                delay(100);
-                ESP.restart();
-            }
-            else if (command == "AUTO") {
+            if (command == "AUTO") {
                 currentMode = MODE_AUTO;
 
                 manualFanOn = false;
