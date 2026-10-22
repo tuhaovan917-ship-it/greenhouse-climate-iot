@@ -1,0 +1,116 @@
+
+{
+  "version": 1,
+  "author": "Greenhouse IoT Team",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp32",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "chip-sht31",
+      "id": "sht31",
+      "top": -80,
+      "left": 240,
+      "attrs": {}
+    },
+    {
+      "type": "chip-bh1750",
+      "id": "bh1750",
+      "top": 120,
+      "left": 240,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "waterSwitch",
+      "top": 270,
+      "left": 240,
+      "attrs": {
+        "value": "1",
+        "bounce": "0"
+      }
+    },    
+    {
+      "type": "chip-fan12v",
+      "id": "fan12v",
+      "top": -120,
+      "left": 520,
+      "attrs": {}
+    },    
+    {
+      "type": "chip-mosfet-n",
+      "id": "fanMosfet",
+      "top": 20,
+      "left": 430,
+      "attrs": {}
+    },
+    {
+      "type": "chip-pump12v",
+      "id": "pump12v",
+      "top": 160,
+      "left": 520,
+      "attrs": {}
+    },
+    {
+      "type": "chip-mosfet-n",
+      "id": "pumpMosfet",
+      "top": 170,
+      "left": 420,
+      "attrs": {}
+    },
+    {
+      "type": "chip-growlight12v",
+      "id": "growlight12v",
+      "top": 320,
+      "left": 520,
+      "attrs": {}
+    },
+    {
+      "type": "chip-mosfet-n",
+      "id": "growlightMosfet",
+      "top": 345,
+      "left": 420,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    ["esp32:TX0", "$serialMonitor:RX", "", []],
+    ["esp32:RX0", "$serialMonitor:TX", "", []],
+
+    ["sht31:VCC", "esp32:3V3", "red", []],
+    ["sht31:GND", "esp32:GND.1", "black", []],
+    ["sht31:SDA", "esp32:D21", "green", []],
+    ["sht31:SCL", "esp32:D22", "blue", []],
+
+    ["bh1750:VCC", "esp32:3V3", "red", []],
+    ["bh1750:GND", "esp32:GND.1", "black", []],
+    ["bh1750:SDA", "esp32:D21", "green", []],
+    ["bh1750:SCL", "esp32:D22", "blue", []],
+    ["bh1750:ADDR", "esp32:GND.1", "black", []],
+
+    ["waterSwitch:2", "esp32:D32", "green", []],
+    ["waterSwitch:1", "esp32:GND.1", "black", []],
+    ["waterSwitch:3", "esp32:3V3", "red", []],
+    
+    ["esp32:D18", "fanMosfet:GATE", "orange", []],
+    ["fanMosfet:DRAIN", "fan12v:VMINUS", "blue", []],
+    ["fanMosfet:SOURCE", "esp32:GND.1", "black", []],
+    
+    ["esp32:D19", "pumpMosfet:GATE", "orange", []],
+    ["pumpMosfet:DRAIN", "pump12v:VMINUS", "blue", []],
+    ["pumpMosfet:SOURCE", "esp32:GND.1", "black", []],
+    
+    ["esp32:D23", "growlightMosfet:GATE", "orange", []],
+    ["growlightMosfet:DRAIN", "growlight12v:VMINUS", "blue", []],
+    ["growlightMosfet:SOURCE", "esp32:GND.1", "black", []]
+  ],
+  "serialMonitor": {
+    "display": "always"
+  },
+  "dependencies": {}
+}
