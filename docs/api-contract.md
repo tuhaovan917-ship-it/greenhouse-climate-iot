@@ -1,6 +1,6 @@
 # API Contract — Backend ↔ Dashboard (Greenhouse Climate IoT)
 
-**Version:** 0.2.6 (quy tắc `reason` của một lệnh: lệnh mới xóa lý do cũ; đã sửa theo báo cáo của Người 1)
+**Version:** 0.2.7 (ghi nhận hành vi failover AUTO 30 giây của ESP32 và cách Dashboard đồng bộ lại chế độ)
 **Base URL (dev):** `http://localhost:8000`
 **Docs tự sinh:** `http://localhost:8000/docs` (FastAPI Swagger)
 **Liên quan:** `docs/mqtt-protocol.md` v0.1 trên nhánh `feat/esp32` (topics `greenhouse/01/*`, JSON telemetry/state/command/config); `database/SCHEMA.md` v0.2 trên nhánh `feat/dashboard` (5 bảng, index, dedup alert, severity). File này KHÔNG định nghĩa lại MQTT hay schema DB, chỉ định nghĩa REST/WS cho Dashboard React+Vite+TS.
@@ -181,6 +181,8 @@ Xem/sửa cấu hình mong muốn (mode + ngưỡng hysteresis). Body giống `D
 Trả về `202`: `{ "status": "PUBLISHED", "config": { ...desired } }` — **chỉ xác nhận Backend đã publish, chưa khẳng định ESP32 đã áp dụng**, vì firmware hiện chưa có `configId`/payload ack toàn bộ ngưỡng (xem `SCHEMA.md` §7). Dashboard theo dõi `GET /state` đổi `mode` để suy ra, không coi `PUBLISHED` là đã áp dụng. Muốn ack đầy đủ phải sửa MQTT contract thêm `configId`.
 Ngưỡng test mặc định: `tempOn 30 / tempOff 28, humOn 55 / humOff 65, lightOn 300 / lightOff 700`.
 
+**Failover AUTO của ESP32 (v0.2.7):** nếu ESP32 mất kết nối quá 30 giây khi đang `MANUAL`, nó tự chuyển về `AUTO` và công bố `state` với `mode: "AUTO"`. Backend **giữ nguyên cấu hình mong muốn** trong `device_configs` (không tự ghi đè ý định của người dùng), nên lúc này `GET /api/config` trả `MANUAL` còn `GET /api/state` trả `AUTO` — chính là cách Dashboard nhận biết "thiết bị đã chuyển AUTO an toàn". Dashboard hiển thị nút **"Xác nhận giữ AUTO"** để người dùng publish lại `mode: "AUTO"`, hoặc chuyển sang `MANUAL` khi thiết bị đã kết nối lại.
+
 ### 3.8 `GET /api/alerts?deviceId=&active=&code=&from=&to=&limit=50`
 Lịch sử + hiện tại cảnh báo (`NO_WATER`, `SENSOR_FAULT`, `OFFLINE`). WS `alert` chỉ realtime, REST mới khôi phục sau reload/reconnect. Quy tắc dedup theo `SCHEMA.md` §6: cùng `device_id + code` thì update alert active (`lastSeenAt`), hết điều kiện thì `active=false + resolvedAt`, tái diễn tạo đợt mới. Demo đóng immediate, bản cuối yêu cầu 3 mẫu tốt liên tiếp (tv2/tv3 chốt sau).
 
@@ -247,3 +249,4 @@ Idempotency: MQTT QoS 1 có thể trùng, ESP32 de-dupe theo `commandId`. `comma
 - v0.2.4 (sau review tv3): 1. `TIMEOUT` push WebSocket `command_result` (`result: "TIMEOUT"`, `reason: "TIMEOUT"`); 2. heartbeat: server ping mỗi 20s (`{"type":"ping"}`), socket không bị đóng vì Dashboard im lặng, Dashboard không cần gửi ping; 3. `app/models.py` có CheckConstraint cho `humidity_pct` (0–100) và `light_lux` (≥ 0) để Alembic sinh migration đúng `SCHEMA.md` §3; 4. `psycopg[binary]` có trong `requirements.txt` cho đường PostgreSQL.
 - v0.2.5 (tích hợp Dashboard): 1. `GET /api/telemetry/latest` trả `200` + `null` thay vì 400 khi chưa có dữ liệu; 2. `GET /api/state` trả `200` + trạng thái mặc định (`online: false`) thay vì 404 khi thiết bị chưa gửi state; 3. type `DeviceState.updatedAt` thành `string | null`. Dashboard tải 6 endpoint song song nên không endpoint nào được trả lỗi khi hệ thống còn trống.
 - v0.2.6 (sau báo cáo của Người 1 về firmware thật): 1. `reason` thuộc về đúng một lệnh — lệnh mới (`lastCommandId` khác) xóa lý do của lệnh cũ, kể cả khi lệnh mới không gửi kèm `reason`; 2. publish lại `state` với cùng `lastCommandId` vẫn giữ lý do đã biết; 3. `command_logs` cũng vậy: kết quả mới thay lý do cũ (late `APPLIED` không còn để lại `reason: "TIMEOUT"`).
+- v0.2.7 (sau khi hợp nhất tất cả 3 nhánh vào `main`): 1. ghi nhận hành vi failover AUTO 30 giây của ESP32 (`docs/mqtt-protocol.md` mục 4) và cách Backend giữ cấu hình mong muốn; 2. `docs/mqtt-protocol.md` chuyển phương án "đề xuất" thành hành vi đã chốt.

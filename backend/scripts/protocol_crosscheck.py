@@ -13,7 +13,15 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 PROTOCOL = REPO / "docs" / "mqtt-protocol.md"
-PROTOCOL_REF = "origin/feat/esp32:docs/mqtt-protocol.md"
+# main is the released state; the feature branches stay as a fallback.
+PROTOCOL_REF_CANDIDATES = (
+    "origin/main:docs/mqtt-protocol.md",
+    "origin/feat/esp32:docs/mqtt-protocol.md",
+)
+FIRMWARE_REF_CANDIDATES = (
+    "origin/main:firmware/src/main.cpp",
+    "origin/feat/esp32:firmware/src/main.cpp",
+)
 
 failures: list[str] = []
 
@@ -24,17 +32,24 @@ def check(name: str, condition: bool, detail: str = "") -> None:
         failures.append(name)
 
 
+def _readFirstRef(candidates: tuple[str, ...]) -> str:
+    for ref in candidates:
+        result = subprocess.run(
+            ["git", "show", ref],
+            cwd=REPO,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            return result.stdout.decode("utf-8", errors="replace")
+    return ""
+
+
 def protocolText() -> str:
-    """Read the MQTT protocol from the working tree, or from the esp32 branch."""
+    """Read the MQTT protocol from the working tree, or from git."""
     if PROTOCOL.exists():
         return PROTOCOL.read_text(encoding="utf-8")
-    result = subprocess.run(
-        ["git", "show", PROTOCOL_REF],
-        cwd=REPO,
-        capture_output=True,
-        check=False,
-    )
-    return result.stdout.decode("utf-8", errors="replace")
+    return _readFirstRef(PROTOCOL_REF_CANDIDATES)
 
 
 def protocolKeys(section: str) -> set[str]:
@@ -55,16 +70,8 @@ def codeKeys(fileName: str, pattern: str) -> set[str]:
 
 
 def _firmwareSource() -> str:
-    """Firmware main.cpp from the esp32 branch (it carries the MQTT client)."""
-    result = subprocess.run(
-        ["git", "show", "origin/feat/esp32:firmware/src/main.cpp"],
-        cwd=REPO,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return ""
-    return result.stdout.decode("utf-8", errors="replace")
+    """Firmware main.cpp that carries the MQTT client (main first)."""
+    return _readFirstRef(FIRMWARE_REF_CANDIDATES)
 
 
 def main() -> int:
@@ -146,6 +153,18 @@ def main() -> int:
         check(
             "firmware reset reason cho lenh moi",
             'mqttLastCommandReason = ""' in firmware,
+        )
+        check(
+            "firmware co failover AUTO khi mat ket noi",
+            "OFFLINE_AUTO_TIMEOUT_MS" in firmware and "MODE_AUTO" in firmware,
+        )
+        check(
+            "firmware dat Last Will cho status",
+            "setWill" in firmware,
+        )
+        check(
+            "firmware publish state voi QoS 1 + retain",
+            "greenhouse/01/state" in firmware,
         )
 
     print()

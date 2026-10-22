@@ -17,7 +17,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 CONTRACT = REPO / "docs" / "api-contract.md"
-DASHBOARD_TYPES = "origin/feat/dashboard:dashboard/src/types/api.ts"
+# The released state is main; the feature branches are kept as a fallback for
+# the case where a part has not been merged yet.
+DASHBOARD_TYPES_CANDIDATES = (
+    "origin/main:dashboard/src/types/api.ts",
+    "origin/feat/dashboard:dashboard/src/types/api.ts",
+)
 
 failures: list[str] = []
 
@@ -37,6 +42,16 @@ def readGitFile(ref: str) -> str:
     return result.stdout.decode("utf-8", errors="replace")
 
 
+def readDashboardTypes() -> str:
+    for ref in DASHBOARD_TYPES_CANDIDATES:
+        result = subprocess.run(
+            ["git", "show", ref], cwd=REPO, capture_output=True, check=False
+        )
+        if result.returncode == 0:
+            return result.stdout.decode("utf-8", errors="replace")
+    raise SystemExit("Khong tim thay dashboard/src/types/api.ts trong main hay feat/dashboard")
+
+
 def contractTypes() -> dict[str, dict[str, str]]:
     """Interfaces of the TypeScript block inside the contract document."""
     text = CONTRACT.read_text(encoding="utf-8")
@@ -47,7 +62,7 @@ def contractTypes() -> dict[str, dict[str, str]]:
 
 
 def dashboardTypes() -> dict[str, dict[str, str]]:
-    return parseInterfaces(readGitFile(DASHBOARD_TYPES))
+    return parseInterfaces(readDashboardTypes())
 
 
 def parseInterfaces(source: str) -> dict[str, dict[str, str]]:
@@ -105,7 +120,7 @@ def main() -> int:
 
     print()
     print("=== 3. KIEU FIELD KHAC NHAU (cung ten, bo qua chi tiet kieu con) ===")
-    dashboardSource = readGitFile(DASHBOARD_TYPES)
+    dashboardSource = readDashboardTypes()
     for name in sorted(set(contract) & set(dashboard)):
         for field in sorted(set(contract[name]) & set(dashboard[name])):
             contractType = contract[name][field]

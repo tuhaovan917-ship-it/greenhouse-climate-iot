@@ -113,8 +113,8 @@ Cả hai bản tin dùng `retain=true`. Backend có thể bổ sung cơ chế ph
 1. **AUTO:** nhiệt độ cao → bật quạt; độ ẩm thấp **và còn nước** → bật phun sương; ánh sáng yếu → bật đèn. Tắt thiết bị tại ngưỡng tắt tương ứng.
 2. **MANUAL:** chỉ tiếp nhận yêu cầu qua `command`; thiết bị vẫn bị giới hạn bởi quy tắc an toàn.
 3. **FAILSAFE:** hết nước hoặc trạng thái cảm biến nước không đáng tin → **không cho bơm chạy**; báo trạng thái/cảnh báo khi có kết nối.
-4. **Mất Wi-Fi/MQTT:** tiếp tục điều khiển cục bộ; không chờ MQTT mới điều khiển, tự động thử kết nối lại. Phương án đề xuất để cả nhóm xác nhận: tạm dùng AUTO cục bộ khi mất kết nối nếu trước đó đang MANUAL.
-5. **Kết nối lại:** ESP32 publish `status=online`, `state` thực tế và `telemetry` mới; không tự thực thi lệnh MANUAL cũ.
+4. **Mất Wi-Fi/MQTT:** tiếp tục điều khiển cục bộ; không chờ MQTT mới điều khiển, tự động thử kết nối lại. **Đã chốt (v0.2):** nếu mất kết nối quá **30 giây** và thiết bị đang ở `MANUAL`, ESP32 tự chuyển về `AUTO` cục bộ (failover an toàn) và bật lại bơm theo ngưỡng khi có nước. Hẹn 30 giây cho thiết bị có thời gian báo cáo trạng thái trước khi chuyển.
+5. **Kết nối lại:** ESP32 publish `status=online`, `state` thực tế và `telemetry` mới; không tự thực thi lệnh MANUAL cũ. Sau failover, thiết bị vẫn ở `AUTO` cho tới khi Dashboard xác nhận lại chế độ mong muốn (xem `docs/api-contract.md` mục 3.7).
 
 ## 5. Trách nhiệm tích hợp
 
