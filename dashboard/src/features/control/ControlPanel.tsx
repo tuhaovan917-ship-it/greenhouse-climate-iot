@@ -216,6 +216,8 @@ export function ControlPanel({
   const [modeNotice, setModeNotice] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const awaitingModeConfirmation = config.mode !== deviceState.mode
+  const needsAutoReconciliation =
+    config.mode === 'MANUAL' && deviceState.mode === 'AUTO'
 
   const pendingByDevice = useMemo(() => {
     const pending = new Set<DeviceName>()
@@ -252,7 +254,9 @@ export function ControlPanel({
   }
 
   async function handleModeChange() {
-    const nextMode: ControlMode = deviceState.mode === 'AUTO' ? 'MANUAL' : 'AUTO'
+    const nextMode: ControlMode = needsAutoReconciliation
+      ? 'AUTO'
+      : deviceState.mode === 'AUTO' ? 'MANUAL' : 'AUTO'
     setPublishingMode(true)
     setModeNotice(null)
     setErrorMessage(null)
@@ -317,15 +321,21 @@ export function ControlPanel({
               </div>
               <button
                 className="rounded-xl border border-emerald-700/25 bg-emerald-100/80 px-4 py-2 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-400/25 dark:bg-emerald-400/10 dark:text-emerald-200 dark:hover:bg-emerald-400/15"
-                disabled={!deviceState.online || publishingMode || awaitingModeConfirmation}
+                disabled={
+                  !deviceState.online ||
+                  publishingMode ||
+                  (awaitingModeConfirmation && !needsAutoReconciliation)
+                }
                 onClick={handleModeChange}
                 type="button"
               >
                 {publishingMode
                   ? 'Đang publish…'
-                  : awaitingModeConfirmation
-                    ? 'Đang chờ ESP32'
-                    : `Yêu cầu ${deviceState.mode === 'AUTO' ? 'MANUAL' : 'AUTO'}`}
+                  : needsAutoReconciliation
+                    ? 'Xác nhận giữ AUTO'
+                    : awaitingModeConfirmation
+                      ? 'Đang chờ ESP32'
+                      : `Yêu cầu ${deviceState.mode === 'AUTO' ? 'MANUAL' : 'AUTO'}`}
               </button>
             </div>
             <p className="mt-3 text-[0.68rem] leading-5 text-slate-500 dark:text-slate-400">

@@ -133,4 +133,31 @@ describe('ControlPanel', () => {
     expect(screen.getByText('Hết nước — bơm bị khóa an toàn', { exact: false })).toBeInTheDocument()
     expect(screen.getByText('Phản hồi trễ')).toBeInTheDocument()
   })
+  
+  it('cho phép xác nhận giữ AUTO sau khi mất mạng', async () => {
+    const user = userEvent.setup()
+
+    const { onPublishMode } = renderControlPanel({
+      config: {
+        ...fixtureDeviceConfig,
+        mode: 'MANUAL',
+      },
+      deviceState: {
+        ...fixtureDeviceState,
+        mode: 'AUTO',
+        online: true,
+      },
+    })
+
+    const button = screen.getByRole('button', {
+      name: 'Xác nhận giữ AUTO',
+    })
+
+    expect(button).toBeEnabled()
+
+    await user.click(button)
+
+    expect(onPublishMode).toHaveBeenCalledTimes(1)
+    expect(onPublishMode).toHaveBeenCalledWith('AUTO')
+  })
 })
