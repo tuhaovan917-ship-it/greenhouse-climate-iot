@@ -1,0 +1,9 @@
+{
+  "name": "Logic-level N-MOSFET (digital low-side)",
+  "author": "Greenhouse IoT Team",
+  "pins": [
+    "GATE",
+    "DRAIN",
+    "SOURCE"
+  ]
+}

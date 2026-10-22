@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets - only .env.example is committed (CONTRIBUTING.md rule 5)
+.env
+
+# Runtime SQLite database (WAL mode also creates -wal and -shm files)
+*.db
+*.db-wal
+*.db-shm
+
+# TLS certificates must never be committed
+certs/
+
+# Test / coverage output
+.pytest_cache/
+.coverage
+htmlcov/
+*.log

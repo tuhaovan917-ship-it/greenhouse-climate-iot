@@ -1,0 +1,13 @@
+
+{
+  "name": "DC 12V Misting Pump",
+  "author": "Greenhouse IoT Team",
+  "pins": [
+    "VPLUS",
+    "VMINUS"
+  ],
+  "display": {
+    "width": 170,
+    "height": 90
+  }
+}

@@ -1,0 +1,29 @@
+
+{
+  "name": "SHT31 Temperature & Humidity Sensor",
+  "author": "Greenhouse IoT Team",
+  "pins": [
+    "VCC",
+    "GND",
+    "SCL",
+    "SDA"
+  ],
+  "controls": [
+    {
+      "id": "temperature",
+      "label": "Temperature (°C)",
+      "type": "range",
+      "min": -40,
+      "max": 125,
+      "step": 0.1
+    },
+    {
+      "id": "humidity",
+      "label": "Humidity (%)",
+      "type": "range",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    }
+  ]
+}

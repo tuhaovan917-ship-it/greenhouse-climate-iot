@@ -1,0 +1,13 @@
+
+{
+  "name": "DC 12V Ventilation Fan",
+  "author": "Greenhouse IoT Team",
+  "pins": [
+    "VPLUS",
+    "VMINUS"
+  ],
+  "display": {
+    "width": 160,
+    "height": 80
+  }
+}

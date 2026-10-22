@@ -1,0 +1,14 @@
+# Greenhouse Climate IoT - Backend requirements (Member 2)
+# Python 3.11+
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+sqlmodel>=0.0.22
+SQLAlchemy>=2.0
+paho-mqtt>=2.1
+python-dotenv>=1.0
+aiosqlite>=0.20
+websockets>=13
+# Driver for the PostgreSQL upgrade path (DATABASE_URL=postgresql+psycopg://...).
+# SQLite stays the default, so this is only needed when Postgres is used.
+psycopg[binary]>=3.2
+# Alembic is owned by Member 3 and lives in database/, not here.
