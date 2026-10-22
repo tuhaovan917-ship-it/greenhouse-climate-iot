@@ -88,3 +88,40 @@ not physical hardware validation.
 
 ### Conclusion
 AUTO control resumes correctly after switching from MANUAL mode in Wokwi simulation.
+
+## Final Integration Validation - 2026-10-22
+
+### Environment
+- Firmware: ESP32 Arduino, PlatformIO, Wokwi
+- Backend: Python FastAPI, SQLite
+- Frontend: React, Vite, TypeScript
+- MQTT Broker: Eclipse Mosquitto in Docker
+- MQTT Client: 256dpi/MQTT 2.5.3
+
+### Validation Results
+
+| Test | Result |
+|---|---|
+| ESP32 firmware build | PASS |
+| Backend automated tests: 57/57 | PASS |
+| Dashboard automated tests: 42/42 | PASS |
+| Dashboard lint and production build | PASS |
+| Backend health and database connection | PASS |
+| MQTT state QoS 1, retained | PASS |
+| MQTT status QoS 1, retained | PASS |
+| MQTT telemetry QoS 0 | PASS |
+| Dashboard MANUAL fan ON/OFF | PASS |
+| Offline MANUAL to AUTO fallback after 30s | PASS |
+| Fan ON to OFF during AUTO fallback | PASS |
+| MQTT reconnect and state synchronization | PASS |
+| Mosquitto persistence and retained restore | PASS |
+
+### Limitations
+- Tests were performed with Wokwi simulation,
+  not physical ESP32 hardware.
+- MQTT broker uses port 1883 without TLS
+  in the local demonstration environment.
+- Backend tests produced 15 deprecation warnings,
+  with no failing tests.
+- QoS 1 was verified through subscriber observations;
+  a separate packet-level PUBACK capture was not performed.
