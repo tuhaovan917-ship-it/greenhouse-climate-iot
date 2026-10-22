@@ -183,3 +183,6 @@ class DeviceConfig(SQLModel, table=True):
     light_off_lux: float = Field(default=700.0)
     updated_at: datetime = Field(default_factory=utcNow)
     published_at: datetime | None = Field(default=None)
+
+# Register authentication tables with SQLModel metadata and Alembic.
+from app import auth_models  # noqa: F401
