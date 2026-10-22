@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
-#include <PubSubClient.h>
+#include <MQTT.h>
 #include <ArduinoJson.h>
 #include <math.h>
 #include <Preferences.h>
@@ -16,7 +16,9 @@
 #define GROWLIGHT_PIN 23
 
 WiFiClient wifiClient;
-PubSubClient mqttClient(wifiClient);
+MQTTClient mqttClient(512);
+
+bool pendingStatePublish = false;
 
 String mqttLastCommandId = "";
 String mqttLastCommandResult = "";
@@ -518,7 +520,8 @@ void publishDeviceState() {
     bool sent = mqttClient.publish(
         "greenhouse/01/state",
         payload,
-        true
+        true,
+        1
     );
 
     if (sent) {
@@ -551,7 +554,7 @@ void handleMqttCommand(byte* payload, unsigned int length) {
     // Khong thuc thi lai lenh gan nhat neu MQTT gui trung.
     if (commandId == mqttLastCommandId) {
         Serial.println("[MQTT] Duplicate command ignored");
-        publishDeviceState();
+        pendingStatePublish = true;
         return;
     }
 
@@ -622,7 +625,7 @@ void handleMqttCommand(byte* payload, unsigned int length) {
     }
 
     // Gui phan hoi thuc te ve Backend.
-    publishDeviceState();
+    pendingStatePublish = true;
 }
 
 bool readMqttNumber(JsonVariantConst value, float &result) {
@@ -637,9 +640,12 @@ bool readMqttNumber(JsonVariantConst value, float &result) {
     return isfinite(result);
 }
 
-void onMqttMessage(char* topic, byte* payload, unsigned int length) {
+void onMqttMessage(MQTTClient* client, char* topic, char* payload, int length) {
     if (strcmp(topic, "greenhouse/01/command") == 0) {
-        handleMqttCommand(payload, length);
+        handleMqttCommand(
+            reinterpret_cast<byte*>(payload),
+            static_cast<unsigned int>(length)
+        );
         return;
     }
 
@@ -759,7 +765,7 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
         requestedMode.c_str()
     );
 
-    publishDeviceState();
+    pendingStatePublish = true;
 }
 
 void testMqttConnection() {
@@ -768,20 +774,10 @@ void testMqttConnection() {
         return;
     }
 
-    mqttClient.setServer("host.wokwi.internal", 1883);
-    mqttClient.setCallback(onMqttMessage);
-    mqttClient.setBufferSize(512);
-    // Gioi han thoi gian cho phan hoi MQTT CONNACK.
-    mqttClient.setSocketTimeout(2);
-
     Serial.println("[MQTT] Connecting to broker...");
 
     bool connected = mqttClient.connect(
-        "esp32-greenhouse-01-test",
-        "greenhouse/01/status",
-        1,
-        true,
-        "{\"online\":false}"
+        "esp32-greenhouse-01-test"
     );
 
     if (connected) {
@@ -819,7 +815,8 @@ void testMqttConnection() {
         bool sent = mqttClient.publish(
             "greenhouse/01/status",
             "{\"online\":true}",
-            true
+            true,
+            1
         );
 
         Serial.println(
@@ -831,8 +828,9 @@ void testMqttConnection() {
         publishDeviceState();
     } else {
         Serial.printf(
-            "[MQTT] Connection failed! Code: %d\n",
-            mqttClient.state()
+            "[MQTT] Connection failed! Error: %d, Return: %d\n",
+            (int)mqttClient.lastError(),
+            (int)mqttClient.returnCode()
         );
     }
 }
@@ -914,7 +912,9 @@ void publishTelemetry(
 
     bool sent = mqttClient.publish(
         "greenhouse/01/telemetry",
-        payload
+        payload,
+        false,
+        0
     );
 
     if (sent) {
@@ -941,6 +941,16 @@ void setup() {
     delay(500);
     scanI2C();
     testWokwiNetwork();
+    mqttClient.begin("host.wokwi.internal", 1883, wifiClient);
+    mqttClient.onMessageAdvanced(onMqttMessage);
+    mqttClient.setTimeout(1000);
+
+    mqttClient.setWill(
+        "greenhouse/01/status",
+        "{\"online\":false}",
+        true,
+        1
+    );
     testMqttConnection();
     lastWifiRetryMs = millis();
     lastMqttRetryMs = millis();
@@ -970,6 +980,11 @@ void loop() {
     // Kiem tra failsafe truoc khi thu ket noi (MQTT connect co the cho ngan).
     maintainConnectivity();
     checkOfflineAutoFallback();
+
+    if (pendingStatePublish && mqttClient.connected()) {
+        pendingStatePublish = false;
+        publishDeviceState();
+    }
 
     unsigned long currentMillis = millis();
 
