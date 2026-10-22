@@ -1,0 +1,25 @@
+# Local agent instructions (not committed)
+/AGENTS.md
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# SQLite runtime files
+*.db
+*.db-shm
+*.db-wal
+
+# Dashboard dependencies and build output
+dashboard/node_modules/
+dashboard/dist/
+
+# Local OS/editor files
+.DS_Store

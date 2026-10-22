@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f3f7f4" />
+    <script>
+      ;(() => {
+        try {
+          const storedTheme = localStorage.getItem('greenhouse-theme')
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          const hasStoredTheme = storedTheme === 'light' || storedTheme === 'dark'
+          const isDark = storedTheme === 'dark' || (!hasStoredTheme && prefersDark)
+
+          document.documentElement.classList.toggle('dark', isDark)
+          document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+          document.querySelector('meta[name="theme-color"]').content = isDark
+            ? '#07110e'
+            : '#f3f7f4'
+        } catch {
+          document.documentElement.classList.remove('dark')
+        }
+      })()
+    </script>
+    <meta
+      name="description"
+      content="Dashboard giám sát khí hậu và thiết bị cho hệ thống nhà kính IoT."
+    />
+    <title>Greenhouse Climate Dashboard</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
