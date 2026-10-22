@@ -23,6 +23,7 @@ from collections.abc import Callable
 from typing import Any
 
 import paho.mqtt.client as mqtt
+from paho.mqtt.enums import CallbackAPIVersion
 
 from app.config import Settings, settings
 
@@ -65,7 +66,7 @@ class MqttService:
             return
 
         client = mqtt.Client(
-            mqtt.CallbackAPIVersion.VERSION2,
+            CallbackAPIVersion.VERSION2,
             client_id=self._mqtt.client_id,
             clean_session=True,
         )

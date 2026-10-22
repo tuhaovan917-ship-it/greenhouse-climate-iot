@@ -31,6 +31,7 @@ import random
 import time
 
 import paho.mqtt.client as mqtt
+from paho.mqtt.enums import CallbackAPIVersion
 
 DEVICE_ID = "greenhouse-01"
 PREFIX = "greenhouse/01"
@@ -64,7 +65,7 @@ class MockEsp32:
             "lightOnLux": 300.0,
             "lightOffLux": 700.0,
         }
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="esp32-mock")
+        self.client = mqtt.Client(CallbackAPIVersion.VERSION2, client_id="esp32-mock")
         # Last Will: the broker publishes offline when this process dies.
         self.client.will_set(TOPIC_STATUS, json.dumps({"online": False}), qos=1, retain=True)
         self.client.on_connect = self.onConnect
