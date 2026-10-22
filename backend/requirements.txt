@@ -12,3 +12,5 @@ websockets>=13
 # SQLite stays the default, so this is only needed when Postgres is used.
 psycopg[binary]>=3.2
 # Alembic is owned by Member 3 and lives in database/, not here.
+# Password hashing for interactive users
+pwdlib[argon2]>=0.3,<1

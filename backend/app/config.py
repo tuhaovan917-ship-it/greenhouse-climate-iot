@@ -66,6 +66,10 @@ class Settings:
     device_id: str = DEFAULT_DEVICE_ID
     # Empty API key disables write protection (localhost demo). See contract section 5.
     api_key: str = ""
+    # Cookie Secure must be True for HTTPS deployment. False only for localhost.
+    auth_cookie_secure: bool = False
+    auth_session_hours: int = 8
+    cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
     # No ESP32 reply within this many seconds -> command becomes TIMEOUT (contract 3.5).
     command_timeout_s: int = 5
     # No valid MQTT message from a device for this many seconds -> online=false (contract 3.4).
@@ -100,6 +104,13 @@ def load_settings() -> Settings:
         api_port=_read_int("API_PORT", Settings.api_port),
         device_id=os.getenv("DEVICE_ID", Settings.device_id) or Settings.device_id,
         api_key=os.getenv("API_KEY", "") or "",
+        auth_cookie_secure=_read_bool("AUTH_COOKIE_SECURE", False),
+        auth_session_hours=max(1, min(24, _read_int("AUTH_SESSION_HOURS", 8))),
+        cors_origins=tuple(
+            o.strip().rstrip("/") for o in os.getenv(
+                "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+            ).split(",") if o.strip()
+        ),
         command_timeout_s=_read_int("COMMAND_TIMEOUT_S", 5),
         device_timeout_s=_read_int("DEVICE_TIMEOUT_S", 15),
         mqtt=mqtt,
