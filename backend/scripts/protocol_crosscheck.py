@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import enableUtf8Console  # noqa: E402
+
+enableUtf8Console()
 
 REPO = Path(__file__).resolve().parents[2]
 PROTOCOL = REPO / "docs" / "mqtt-protocol.md"
@@ -75,6 +81,7 @@ def _firmwareSource() -> str:
 
 
 def main() -> int:
+    enableUtf8Console()
     print("=== MQTT payload keys: protocol vs Backend ===")
 
     # Backend -> ESP32

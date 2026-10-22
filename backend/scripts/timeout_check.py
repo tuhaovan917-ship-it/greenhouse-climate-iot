@@ -17,8 +17,13 @@ import asyncio
 import json
 import os
 import sys
+
 import tempfile
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import enableUtf8Console  # noqa: E402
+
+enableUtf8Console()
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -41,7 +46,6 @@ os.environ["MQTT_KEEPALIVE_S"] = "60"
 import paho.mqtt.client as mqtt  # noqa: E402
 from amqtt.broker import Broker  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-
 from app.database import createTablesForTest  # noqa: E402
 from app.main import app  # noqa: E402
 from app.mqtt_client import mqttService  # noqa: E402
@@ -50,12 +54,10 @@ createTablesForTest()
 
 failures: list[str] = []
 
-
 def check(name: str, condition: bool, detail: str = "") -> None:
     print(f"[{'PASS' if condition else 'FAIL'}] {name}{(' - ' + detail) if detail else ''}")
     if not condition:
         failures.append(name)
-
 
 async def waitFor(predicate, timeout: float = 20.0, interval: float = 0.3) -> bool:  # noqa: ANN001
     waited = 0.0
@@ -65,7 +67,6 @@ async def waitFor(predicate, timeout: float = 20.0, interval: float = 0.3) -> bo
         await asyncio.sleep(interval)
         waited += interval
     return predicate()
-
 
 async def main() -> int:
     broker = Broker({"listeners": {"default": {"type": "tcp", "bind": f"127.0.0.1:{PORT}"}}, "sys_interval": 0})
@@ -183,11 +184,9 @@ async def main() -> int:
     print("TIMEOUT CHECK PASSED: all checks green")
     return 0
 
-
 def _state(client: TestClient) -> dict | None:
     response = client.get("/api/state")
     return response.json() if response.status_code == 200 else None
-
 
 def _status(client: TestClient, commandId: str) -> str:
     for row in client.get("/api/commands").json()["data"]:
@@ -195,14 +194,12 @@ def _status(client: TestClient, commandId: str) -> str:
             return row["status"]
     return "missing"
 
-
 def _waitForWs(socket, wanted: str, maxReads: int = 6) -> dict | None:  # noqa: ANN001
     for _ in range(maxReads):
         message = socket.receive_json()
         if message.get("type") == wanted:
             return message
     return None
-
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))

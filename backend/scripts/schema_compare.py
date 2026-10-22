@@ -17,7 +17,12 @@ from __future__ import annotations
 import os
 import sqlite3
 import sys
+
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import enableUtf8Console  # noqa: E402
+
+enableUtf8Console()
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -25,17 +30,14 @@ from sqlalchemy import create_engine, inspect  # noqa: E402
 
 from app.models import SQLModel  # noqa: E402
 
-
 def databasePath() -> str:
     if len(sys.argv) > 1:
         return sys.argv[1]
     url = os.environ.get("DATABASE_URL", "sqlite:///./greenhouse.db")
     return url.split("///", 1)[-1]
 
-
 def modelTables() -> dict[str, SQLModel.__class__]:
     return {name: table for name, table in SQLModel.metadata.tables.items()}
-
 
 def main() -> int:
     path = databasePath()
@@ -149,7 +151,6 @@ def main() -> int:
         return 1
     print("SCHEMA COMPARE PASSED: migration va models giong nhau")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -18,8 +18,13 @@ import asyncio
 import os
 import subprocess
 import sys
+
 import tempfile
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import enableUtf8Console  # noqa: E402
+
+enableUtf8Console()
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
@@ -40,7 +45,6 @@ os.environ["AUTO_CREATE_TABLES"] = "1"
 
 from amqtt.broker import Broker  # noqa: E402  (dev-only broker for this check)
 from fastapi.testclient import TestClient  # noqa: E402
-
 from app.database import createTablesForTest  # noqa: E402
 from app.main import app  # noqa: E402
 from app.mqtt_client import mqttService  # noqa: E402
@@ -49,12 +53,10 @@ createTablesForTest()
 
 failures: list[str] = []
 
-
 def check(name: str, condition: bool, detail: str = "") -> None:
     print(f"[{'PASS' if condition else 'FAIL'}] {name}{(' - ' + detail) if detail else ''}")
     if not condition:
         failures.append(name)
-
 
 async def waitFor(predicate, timeout: float = 20.0, interval: float = 0.3) -> bool:  # noqa: ANN001
     waited = 0.0
@@ -65,7 +67,6 @@ async def waitFor(predicate, timeout: float = 20.0, interval: float = 0.3) -> bo
         waited += interval
     return predicate()
 
-
 def startMock(*extra: str) -> subprocess.Popen:
     return subprocess.Popen(
         [sys.executable, str(BACKEND_DIR / "demo_esp32_mock.py"), "--broker", "127.0.0.1", "--port", str(PORT), "--period", "2", *extra],
@@ -74,7 +75,6 @@ def startMock(*extra: str) -> subprocess.Popen:
         text=True,
         cwd=str(BACKEND_DIR),
     )
-
 
 def stopMock(process: subprocess.Popen) -> None:
     process.terminate()
@@ -86,11 +86,9 @@ def stopMock(process: subprocess.Popen) -> None:
     tail = "\n".join((output or "").splitlines()[-6:])
     print(f"--- mock output tail ---\n{tail}")
 
-
 def state(client: TestClient) -> dict | None:
     response = client.get("/api/state")
     return response.json() if response.status_code == 200 else None
-
 
 async def main() -> int:
     broker = Broker({"listeners": {"default": {"type": "tcp", "bind": f"127.0.0.1:{PORT}"}}, "sys_interval": 0})
@@ -181,21 +179,17 @@ async def main() -> int:
     print("MOCK DEMO CHECK PASSED: all checks green")
     return 0
 
-
 def _row(client: TestClient, commandId: str) -> dict:
     for row in client.get("/api/commands").json()["data"]:
         if row["commandId"] == commandId:
             return row
     return {}
 
-
 def _status(client: TestClient, commandId: str) -> str:
     return _row(client, commandId).get("status", "missing")
 
-
 def _reason(client: TestClient, commandId: str) -> str:
     return str(_row(client, commandId).get("reason"))
-
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))

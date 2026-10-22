@@ -20,8 +20,13 @@ import asyncio
 import json
 import os
 import sys
+
 import tempfile
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import enableUtf8Console  # noqa: E402
+
+enableUtf8Console()
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -43,7 +48,6 @@ os.environ["AUTO_CREATE_TABLES"] = "1"
 import paho.mqtt.client as mqtt  # noqa: E402
 from amqtt.broker import Broker  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-
 from app.database import createTablesForTest  # noqa: E402
 from app.main import app  # noqa: E402
 from app.mqtt_client import mqttService  # noqa: E402
@@ -52,18 +56,15 @@ createTablesForTest()
 
 failures: list[str] = []
 
-
 def check(name: str, condition: bool, detail: str = "") -> None:
     print(f"[{'PASS' if condition else 'FAIL'}] {name}{(' - ' + detail) if detail else ''}")
     if not condition:
         failures.append(name)
 
-
 async def startBroker() -> Broker:
     broker = Broker({"listeners": {"default": {"type": "tcp", "bind": f"127.0.0.1:{PORT}"}}, "sys_interval": 0})
     await broker.start()
     return broker
-
 
 async def waitFor(predicate, timeout: float = 10.0, interval: float = 0.2) -> bool:  # noqa: ANN001
     waited = 0.0
@@ -73,7 +74,6 @@ async def waitFor(predicate, timeout: float = 10.0, interval: float = 0.2) -> bo
         await asyncio.sleep(interval)
         waited += interval
     return predicate()
-
 
 async def main() -> int:
     broker = await startBroker()
@@ -328,32 +328,26 @@ async def main() -> int:
     print("MQTT CHECK PASSED: all checks green")
     return 0
 
-
 def _state(client: TestClient) -> dict | None:
     response = client.get("/api/state")
     return response.json() if response.status_code == 200 else None
-
 
 def _stateMode(client: TestClient) -> str:
     state = _state(client)
     return state["mode"] if state else "none"
 
-
 def _isOnline(client: TestClient) -> bool:
     state = _state(client)
     return bool(state and state["online"])
 
-
 def _activeAlerts(client: TestClient) -> int:
     return len(client.get("/api/alerts", params={"active": "true"}).json()["data"])
-
 
 def _commandStatus(client: TestClient, commandId: str) -> str:
     for row in client.get("/api/commands").json()["data"]:
         if row["commandId"] == commandId:
             return row["status"]
     return "missing"
-
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))

@@ -7,11 +7,17 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import enableUtf8Console  # noqa: E402
+
+enableUtf8Console()
+
+import json
 
 import websockets
-
 
 async def main() -> int:
     url = sys.argv[1] if len(sys.argv) > 1 else "ws://127.0.0.1:8092/ws?deviceId=greenhouse-01"
@@ -48,7 +54,6 @@ async def main() -> int:
         return 1
     print("WS PROBE PASSED: all checks green")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))

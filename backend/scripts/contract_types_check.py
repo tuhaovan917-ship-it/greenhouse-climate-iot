@@ -13,7 +13,13 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import enableUtf8Console  # noqa: E402
+
+enableUtf8Console()
 
 REPO = Path(__file__).resolve().parents[2]
 CONTRACT = REPO / "docs" / "api-contract.md"
@@ -90,6 +96,7 @@ def parseInterfaces(source: str) -> dict[str, dict[str, str]]:
 
 
 def main() -> int:
+    enableUtf8Console()
     contract = contractTypes()
     dashboard = dashboardTypes()
     if not contract:

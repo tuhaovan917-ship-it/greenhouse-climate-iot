@@ -17,8 +17,13 @@ from __future__ import annotations
 
 import os
 import sys
+
 import tempfile
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import enableUtf8Console  # noqa: E402
+
+enableUtf8Console()
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -43,17 +48,14 @@ createTablesForTest()
 
 failures: list[str] = []
 
-
 def check(name: str, condition: bool, detail: str = "") -> None:
     print(f"[{'PASS' if condition else 'FAIL'}] {name}{(' - ' + detail) if detail else ''}")
     if not condition:
         failures.append(name)
 
-
 def send(coro) -> None:
     """Drive an ingest coroutine from this synchronous script."""
     anyio.run(lambda: coro)
-
 
 def receiveOfType(socket, wanted: str, maxReads: int = 8) -> dict | None:  # noqa: ANN001
     """Read queued WS messages until the wanted type shows up."""
@@ -62,7 +64,6 @@ def receiveOfType(socket, wanted: str, maxReads: int = 8) -> dict | None:  # noq
         if message.get("type") == wanted:
             return message
     return None
-
 
 def main() -> int:
     with TestClient(app) as client:
@@ -203,7 +204,6 @@ def main() -> int:
         return 1
     print("E2E PASSED: all checks green")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

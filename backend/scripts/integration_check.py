@@ -24,11 +24,16 @@ import os
 import socket
 import subprocess
 import sys
+
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import enableUtf8Console  # noqa: E402
+
+enableUtf8Console()
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO = BACKEND_DIR.parent
@@ -40,12 +45,10 @@ DEVICE = "greenhouse-01"
 
 failures: list[str] = []
 
-
 def check(name: str, condition: bool, detail: str = "") -> None:
     print(f"[{'PASS' if condition else 'FAIL'}] {name}{(' - ' + detail) if detail else ''}")
     if not condition:
         failures.append(name)
-
 
 def call(path: str, params: dict | None = None, body: dict | None = None, method: str = "GET"):
     url = f"http://127.0.0.1:{API_PORT}{path}"
@@ -65,11 +68,9 @@ def call(path: str, params: dict | None = None, body: dict | None = None, method
         raw = error.read()
         return error.code, (json.loads(raw) if raw else None)
 
-
 def portFree(port: int) -> bool:
     with socket.socket() as probe:
         return probe.connect_ex(("127.0.0.1", port)) != 0
-
 
 def waitPort(port: int, timeout: float = 30.0) -> bool:
     deadline = time.time() + timeout
@@ -78,7 +79,6 @@ def waitPort(port: int, timeout: float = 30.0) -> bool:
             return True
         time.sleep(0.5)
     return False
-
 
 def startProcess(arguments: list[str], cwd: Path, env: dict | None = None) -> subprocess.Popen:
     merged = {**os.environ, **(env or {})}
@@ -89,7 +89,6 @@ def startProcess(arguments: list[str], cwd: Path, env: dict | None = None) -> su
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-
 
 def main() -> int:
     # The Windows console defaults to cp1252 and cannot print Vietnamese text.
@@ -296,7 +295,6 @@ def main() -> int:
         return 1
     print("INTEGRATION CHECK PASSED: Backend + Database + thiet bi ao chay dung")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
