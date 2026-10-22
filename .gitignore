@@ -1,25 +1,28 @@
-# Local agent instructions (not committed)
-/AGENTS.md
-
-# Local environment and secrets
-.env
-.env.*
-!.env.example
-
-# Python / Backend
+# Python
 __pycache__/
 *.py[cod]
 .venv/
-.pytest_cache/
+venv/
 
-# SQLite runtime files
+# Node
+node_modules/
+
+# Log cua stack demo local (run_local_demo.ps1)
+.runlogs/
+
+# Secrets - only .env.example is committed (CONTRIBUTING.md rule 5)
+.env
+
+# Runtime SQLite database (WAL mode also creates -wal and -shm files)
 *.db
-*.db-shm
 *.db-wal
+*.db-shm
 
-# Dashboard dependencies and build output
-dashboard/node_modules/
-dashboard/dist/
+# TLS certificates must never be committed
+certs/
 
-# Local OS/editor files
-.DS_Store
+# Test / coverage output
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
