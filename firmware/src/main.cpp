@@ -160,6 +160,50 @@ bool manualFanOn = false;
 bool manualPumpOn = false;
 bool manualGrowLightOn = false;
 
+const unsigned long OFFLINE_AUTO_TIMEOUT_MS = 30000UL;
+bool offlineTimerActive = false;
+unsigned long offlineStartedAtMs = 0;
+
+void checkOfflineAutoFallback() {
+    bool connected =
+        WiFi.status() == WL_CONNECTED &&
+        mqttClient.connected();
+
+    if (connected) {
+        offlineTimerActive = false;
+        return;
+    }
+
+    unsigned long now = millis();
+
+    if (!offlineTimerActive) {
+        offlineTimerActive = true;
+        offlineStartedAtMs = now;
+        Serial.println("[OFFLINE] Connection lost - timer started");
+    }
+
+    if (currentMode == MODE_MANUAL &&
+        now - offlineStartedAtMs >= OFFLINE_AUTO_TIMEOUT_MS) {
+
+        Serial.println("[FAILOVER] 30s offline - switching to AUTO");
+
+        currentMode = MODE_AUTO;
+
+        manualFanOn = false;
+        manualPumpOn = false;
+        manualGrowLightOn = false;
+
+        // Chuyen ve trang thai an toan truoc chu ky AUTO tiep theo.
+        fanOn = false;
+        pumpOn = false;
+        growLightOn = false;
+
+        digitalWrite(FAN_PIN, LOW);
+        digitalWrite(PUMP_PIN, LOW);
+        digitalWrite(GROWLIGHT_PIN, LOW);
+    }
+}
+
 // Tinh CRC-8 cua 2 byte du lieu
 uint8_t calculateCRC(const uint8_t *data) {
     uint8_t crc = 0xFF;
@@ -925,6 +969,7 @@ void loop() {
 
     // Kiem tra failsafe truoc khi thu ket noi (MQTT connect co the cho ngan).
     maintainConnectivity();
+    checkOfflineAutoFallback();
 
     unsigned long currentMillis = millis();
 
