@@ -26,6 +26,7 @@ import type {
 import { formatTimestamp } from '../../utils/formatters'
 
 interface ControlPanelProps {
+  readOnly?: boolean
   telemetry: Telemetry | null
   deviceState: DeviceState
   config: DeviceConfig
@@ -201,6 +202,7 @@ function CommandStatusIcon({ status }: { status: CommandActivity['status'] }) {
 }
 
 export function ControlPanel({
+  readOnly = false,
   telemetry,
   deviceState,
   config,
@@ -230,6 +232,7 @@ export function ControlPanel({
   }, [commands])
 
   async function handleCommand(device: DeviceName) {
+    if (readOnly) return
     const requestedOn = !deviceState[device]
     const blockReason = getBlockReason(device, requestedOn, telemetry, deviceState)
 
@@ -254,6 +257,7 @@ export function ControlPanel({
   }
 
   async function handleModeChange() {
+    if (readOnly) return
     const nextMode: ControlMode = needsAutoReconciliation
       ? 'AUTO'
       : deviceState.mode === 'AUTO' ? 'MANUAL' : 'AUTO'
@@ -275,6 +279,7 @@ export function ControlPanel({
 
   async function handleThresholdSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (readOnly) return
     setModeNotice(null)
     setErrorMessage(null)
 
@@ -311,6 +316,7 @@ export function ControlPanel({
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
               Dashboard chỉ gửi yêu cầu. Trạng thái bật/tắt bên dưới luôn lấy từ phản hồi thực tế của ESP32.
             </p>
+            {readOnly ? <p className="mt-2 text-sm font-semibold text-amber-800 dark:text-amber-200">Quyền Viewer: chỉ xem cấu hình và lịch sử, không thể điều khiển.</p> : null}
           </div>
 
           <div className="rounded-2xl border border-slate-200/80 bg-white/60 p-4 dark:border-white/[0.08] dark:bg-black/15">
@@ -322,6 +328,7 @@ export function ControlPanel({
               <button
                 className="rounded-xl border border-emerald-700/25 bg-emerald-100/80 px-4 py-2 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-400/25 dark:bg-emerald-400/10 dark:text-emerald-200 dark:hover:bg-emerald-400/15"
                 disabled={
+                  readOnly ||
                   !deviceState.online ||
                   publishingMode ||
                   (awaitingModeConfirmation && !needsAutoReconciliation)
@@ -388,6 +395,7 @@ export function ControlPanel({
                     aria-label={field.label}
                     className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm font-semibold text-slate-950 outline-none dark:text-white"
                     inputMode="decimal"
+                    disabled={readOnly}
                     max={field.max}
                     min={field.min}
                     onChange={(event) => setThresholdDraft((current) => ({
@@ -409,7 +417,7 @@ export function ControlPanel({
           <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
             <button
               className="rounded-xl border border-slate-300 bg-white/70 px-4 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.07]"
-              disabled={publishingThresholds}
+              disabled={readOnly || publishingThresholds}
               onClick={() => {
                 setThresholdDraft(configToDraft(config))
                 setErrorMessage(null)
@@ -420,7 +428,7 @@ export function ControlPanel({
             </button>
             <button
               className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 dark:bg-emerald-300 dark:text-emerald-950 dark:hover:bg-emerald-200 dark:disabled:bg-white/[0.06] dark:disabled:text-slate-500"
-              disabled={!deviceState.online || publishingThresholds}
+              disabled={readOnly || !deviceState.online || publishingThresholds}
               type="submit"
             >
               {publishingThresholds ? (
@@ -440,7 +448,7 @@ export function ControlPanel({
             const blockReason = getBlockReason(device, requestedOn, telemetry, deviceState)
             const isPending = pendingByDevice.has(device)
             const isSubmitting = submittingDevice === device
-            const disabled = Boolean(blockReason) || isPending || isSubmitting
+            const disabled = readOnly || Boolean(blockReason) || isPending || isSubmitting
 
             return (
               <article key={device} className="rounded-2xl border border-slate-200/80 bg-white/55 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">

@@ -1,4 +1,4 @@
-/** A5.1 login preview client. A5.2 will reuse this for the real app gate. */
+/** Cookie-backed auth client used by A5.1 preview and A5.2 secure dashboard. */
 import { dashboardConfig } from './config'
 
 export interface AuthUser {
@@ -14,6 +14,15 @@ export interface AuthResponse {
   csrfToken: string
 }
 
+export class AuthApiError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'AuthApiError'
+    this.status = status
+  }
+}
+
 async function authRequest<T>(path: string, init: RequestInit): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
@@ -23,10 +32,10 @@ async function authRequest<T>(path: string, init: RequestInit): Promise<T> {
     headers,
   })
   if (!response.ok) {
-    if (response.status === 401) throw new Error(path.endsWith('/login') ? 'Tài khoản hoặc mật khẩu không đúng.' : 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn.')
-    if (response.status === 429) throw new Error('Quá nhiều lần thử đăng nhập. Hãy thử lại sau.')
-    if (response.status === 403) throw new Error('Yêu cầu bị từ chối do chính sách bảo mật.')
-    throw new Error(`Backend trả về HTTP ${response.status}.`)
+    if (response.status === 401) throw new AuthApiError(401, path.endsWith('/login') ? 'Tài khoản hoặc mật khẩu không đúng.' : 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn.')
+    if (response.status === 429) throw new AuthApiError(429, 'Quá nhiều lần thử đăng nhập. Hãy thử lại sau.')
+    if (response.status === 403) throw new AuthApiError(403, 'Yêu cầu bị từ chối do chính sách bảo mật.')
+    throw new AuthApiError(response.status, `Backend trả về HTTP ${response.status}.`)
   }
   return response.json() as Promise<T>
 }

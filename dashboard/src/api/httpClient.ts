@@ -1,4 +1,5 @@
 import { dashboardConfig } from './config'
+import { expireActiveAuth, getCsrfToken, isSecureDashboardMode } from './authSession'
 
 interface RequestOptions extends RequestInit {
   authenticated?: boolean
@@ -29,16 +30,25 @@ export async function apiRequest<T>(
     requestHeaders.set('Content-Type', 'application/json')
   }
 
-  if (authenticated && dashboardConfig.apiKey) {
+  const secure = isSecureDashboardMode()
+  const method = (options.method ?? 'GET').toUpperCase()
+  if (secure && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    const csrf = getCsrfToken()
+    if (!csrf) throw new ApiError(401, 'Chưa có phiên đăng nhập để gửi yêu cầu điều khiển.')
+    requestHeaders.set('X-CSRF-Token', csrf)
+  }
+  if (!secure && authenticated && dashboardConfig.apiKey) {
     requestHeaders.set('X-API-Key', dashboardConfig.apiKey)
   }
 
   const response = await fetch(new URL(path, dashboardConfig.apiBaseUrl), {
     ...options,
+    credentials: 'include',
     headers: requestHeaders,
   })
 
   if (!response.ok) {
+    if (secure && response.status === 401) expireActiveAuth()
     let message = `Backend trả về lỗi HTTP ${response.status}`
 
     try {

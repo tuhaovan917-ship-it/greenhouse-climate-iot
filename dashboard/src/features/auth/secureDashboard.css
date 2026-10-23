@@ -1,0 +1,32 @@
+.ghs-centered {
+  display: flex; min-height: 100vh; align-items: center; justify-content: center; flex-direction: column;
+  gap: 1.1rem; padding: 2rem; background: #f2f5ee; color: #17372c; text-align: center;
+  font-family: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
+}
+.ghs-centered h1 { font-size: clamp(1.3rem, 3vw, 1.9rem); font-weight: 700; }
+.ghs-centered p { max-width: 36rem; }
+.ghs-centered button, .ghs-session-actions button {
+  display: inline-flex; gap: .5rem; align-items: center; justify-content: center; border: 1px solid #37664e;
+  border-radius: .6rem; padding: .55rem .85rem; background: #17372c; color: #fff; font-size: .82rem;
+  font-weight: 600; cursor: pointer;
+}
+.ghs-centered button:focus-visible, .ghs-session-actions button:focus-visible { outline: 3px solid #d49b45; outline-offset: 3px; }
+.ghs-centered button:disabled, .ghs-session-actions button:disabled { opacity: .6; cursor: not-allowed; }
+.ghs-mark { display: grid; place-items: center; height: 3.25rem; width: 3.25rem; border-radius: 1rem; background: #dcebdc; }
+.ghs-session-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
+  min-height: 4rem; padding: .65rem clamp(1rem, 3vw, 2.5rem); background: #17372c; color: #f2f5ee;
+  border-bottom: 2px solid #4d8466; }
+.ghs-session-brand { display: flex; align-items: center; gap: .45rem; font-size: .77rem; font-weight: 800; letter-spacing: .13em; }
+.ghs-session-brand span { color: #b7d7bc; font-size: .67rem; font-weight: 500; }
+.ghs-session-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .9rem; }
+.ghs-session-actions button { background: #f2f5ee; color: #17372c; border-color: #f2f5ee; }
+.ghs-account { display: flex; flex-direction: column; text-align: right; gap: .15rem; font-size: .72rem; }
+.ghs-account span { font-size: .65rem; color: #b7d7bc; }
+.ghs-viewer-notice { background: #fff3d5; border-bottom: 1px solid #e4c991; padding: .65rem 1.5rem; color: #775016;
+  font-size: .82rem; text-align: center; }
+.ghs-logout-error { padding: .65rem 1rem; background: #fce8e6; color: #9c2b26; text-align: center; font-size: .82rem; }
+@media(max-width: 600px) {
+  .ghs-session-bar { align-items: flex-start; }
+  .ghs-session-brand span { display: none; }
+  .ghs-session-actions { width: 100%; justify-content: space-between; }
+}

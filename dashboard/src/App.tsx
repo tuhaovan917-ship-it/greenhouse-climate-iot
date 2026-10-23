@@ -1,5 +1,7 @@
 import { Leaf, LoaderCircle, RefreshCw, ServerOff } from 'lucide-react'
 import { dashboardConfig } from './api/config'
+import { isSecureDashboardMode } from './api/authSession'
+import { SecureDashboard } from './features/auth/SecureDashboard'
 import { LoginPreview } from './features/auth/LoginPreview'
 import { OverviewPage } from './features/overview/OverviewPage'
 import { useGreenhouseDashboard } from './hooks/useGreenhouseDashboard'
@@ -43,7 +45,7 @@ function DashboardLoadState({ error, onRetry }: DashboardLoadStateProps) {
   )
 }
 
-function DashboardApp() {
+function DashboardApp({ readOnly = false }: { readOnly?: boolean } = {}) {
   const dashboard = useGreenhouseDashboard({
     deviceId: dashboardConfig.deviceId,
     enabled: true,
@@ -63,6 +65,7 @@ function DashboardApp() {
 
   return (
     <OverviewPage
+      controlReadOnly={readOnly}
       alerts={dashboard.alerts}
       control={{
         config: dashboard.config,
@@ -83,10 +86,18 @@ function DashboardApp() {
   )
 }
 
-// Visual + real-login preview only. No auth gating or dashboard changes yet.
-// A5.2 will integrate this component into the real application flow.
+// The secure path is an opt-in end-to-end pilot. / remains the original demo
+// until A6 has completed the strict Backend/Dashboard integration checks.
 export default function App() {
-  return new URLSearchParams(window.location.search).get('preview') === 'login'
-    ? <LoginPreview />
-    : <DashboardApp />
+  if (new URLSearchParams(window.location.search).get('preview') === 'login') {
+    return <LoginPreview />
+  }
+  if (isSecureDashboardMode()) {
+    return (
+      <SecureDashboard renderDashboard={(user) => (
+        <DashboardApp readOnly={user.role === 'viewer'} />
+      )} />
+    )
+  }
+  return <DashboardApp />
 }
