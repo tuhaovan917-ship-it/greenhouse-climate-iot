@@ -1,5 +1,6 @@
 import { Leaf, LoaderCircle, RefreshCw, ServerOff } from 'lucide-react'
 import { dashboardConfig } from './api/config'
+import { LoginPreview } from './features/auth/LoginPreview'
 import { OverviewPage } from './features/overview/OverviewPage'
 import { useGreenhouseDashboard } from './hooks/useGreenhouseDashboard'
 
@@ -42,7 +43,7 @@ function DashboardLoadState({ error, onRetry }: DashboardLoadStateProps) {
   )
 }
 
-export default function App() {
+function DashboardApp() {
   const dashboard = useGreenhouseDashboard({
     deviceId: dashboardConfig.deviceId,
     enabled: true,
@@ -80,4 +81,12 @@ export default function App() {
       telemetry={dashboard.telemetry}
     />
   )
+}
+
+// Visual + real-login preview only. No auth gating or dashboard changes yet.
+// A5.2 will integrate this component into the real application flow.
+export default function App() {
+  return new URLSearchParams(window.location.search).get('preview') === 'login'
+    ? <LoginPreview />
+    : <DashboardApp />
 }

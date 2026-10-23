@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Fraunces:opsz,wght,SOFT,WONK@9..144,600,0,1&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+.ghl-shell { --pine:#17372c; --fern:#498368; --canvas:#f5f4ed; --amber:#d5a65a; --border:#d8dcd1; display:grid; grid-template-columns:minmax(0,1.12fr) minmax(410px,.88fr); min-height:100vh; font-family:'Be Vietnam Pro',system-ui,sans-serif; color:#233a30; background:var(--canvas); }
+.ghl-shell * { box-sizing:border-box; }
+.ghl-shell button,.ghl-shell input { font-family:inherit; }
+.ghl-story { position:relative; background:linear-gradient(152deg,#214736 0%,#17372c 58%,#0c261e 100%); color:#f4f7ee; min-height:100vh; overflow:hidden; }
+.ghl-story::after { content:''; position:absolute; width:620px;height:620px; border:1px solid rgba(216,230,207,.1); border-radius:50%; bottom:-430px;left:-290px; pointer-events:none; }
+.ghl-story-inner { min-height:100vh; display:flex; flex-direction:column; margin:auto; max-width:1020px; padding:42px clamp(28px,4.5vw,88px) 30px; position:relative; z-index:1; }
+.ghl-brand { display:flex; align-items:center; gap:13px; font-size:15px; font-weight:800; letter-spacing:.11em; line-height:1.26; }
+.ghl-brand small { display:block; margin-top:3px; font-size:10px; color:#b7d4bd; font-family:'IBM Plex Mono',monospace; font-weight:500; letter-spacing:.2em; }
+.ghl-brand-icon { height:43px;width:43px; border-radius:13px; display:grid; place-items:center; background:#e5ede1; color:#214736; }
+.ghl-story-copy { padding-top:clamp(56px,10vh,132px); }
+.ghl-kicker,.ghl-eyebrow,.ghl-section-index,.ghl-diagram-top,.ghl-drawing-caption,.ghl-story-footer,.ghl-entry-footer { font-family:'IBM Plex Mono',monospace; letter-spacing:.105em; }
+.ghl-kicker { font-size:11px; font-weight:600; color:#badab8; display:flex; align-items:center; gap:12px; }
+.ghl-kicker-line { height:1px; width:28px; background:var(--amber); }
+.ghl-story h1 { font-family:'Fraunces',Georgia,serif; font-size:clamp(46px,5.7vw,87px); line-height:1.12; font-weight:600; letter-spacing:-.05em; margin:24px 0 22px; }
+.ghl-story h1 em { color:#b7d3ac; font-weight:600; font-style:italic; }
+.ghl-story-desc { max-width:445px; color:#d1dfd0; font-size:14px; line-height:1.9; margin:0; }
+.ghl-drawing { margin-top:45px; border:1px solid rgba(230,241,221,.22); border-radius:3px; background:rgba(3,21,12,.16); max-width:760px; padding:16px 18px 13px; }
+.ghl-diagram-top { display:flex; justify-content:space-between; gap:12px; font-size:10px; color:#b9d8b7; }
+.ghl-greenhouse-svg { display:block; width:100%; max-height:340px; }
+.ghl-drawing-caption { font-size:10px; line-height:1.5; color:#acc8ac; margin:0; text-transform:uppercase; }
+.ghl-story-footer { margin-top:auto; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-top:36px; font-size:10px; color:#acc9b2; }
+.ghl-story-footer span { display:inline-flex; align-items:center; gap:7px; }
+.ghl-entry { position:relative; display:flex; flex-direction:column; padding:40px clamp(26px,5vw,88px) 27px; background:var(--canvas); }
+.ghl-entry-top,.ghl-entry-footer { display:flex; align-items:center; justify-content:space-between; gap:15px; }
+.ghl-eyebrow,.ghl-section-index { color:#66786b; font-size:11px; font-weight:600; }
+.ghl-entry-mark { height:40px;width:40px; display:grid; place-items:center; border:1px solid #d2ddd0; color:#416f57; border-radius:50%; }
+.ghl-form-wrap { width:100%; max-width:445px; margin:auto; padding:55px 0 85px; }
+.ghl-section-index { display:flex; align-items:center; gap:15px; }
+.ghl-section-index::after { content:''; width:45px; height:1px; background:#8fa897; }
+.ghl-entry h2 { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:clamp(45px,4.4vw,69px); line-height:1.09; letter-spacing:-.045em; margin:22px 0 20px; color:#17372c; }
+.ghl-period { color:#a97e42; }
+.ghl-form-description { color:#68786b; font-size:14px; line-height:1.85; max-width:415px; margin:0 0 38px; }
+.ghl-form { display:flex; flex-direction:column; gap:0; }
+.ghl-form label { display:block; font-size:12px; letter-spacing:.005em; font-weight:700; margin-bottom:10px; color:#254334; }
+.ghl-form input { outline:none; border:1px solid #ced8cd; border-radius:10px; background:#fffefa; width:100%; height:53px; padding:0 16px; color:#153d2e; font-size:14px; transition:border-color .16s,box-shadow .16s; }
+.ghl-form input::placeholder { color:#88958a; }
+.ghl-form input:focus-visible { border-color:#397b5b; box-shadow:0 0 0 3px rgba(68,132,96,.16); }
+.ghl-form input:disabled { opacity:.65; }
+.ghl-password-heading { display:flex; justify-content:space-between; align-items:center; margin:23px 0 0; color:#668470; }
+.ghl-password-heading label { margin:0 0 10px; }
+.ghl-password-heading svg { margin-bottom:10px; }
+.ghl-password-field { position:relative; }
+.ghl-password-field input { padding-right:56px; }
+.ghl-password-field button { cursor:pointer; position:absolute; top:5px; right:5px; width:43px; height:43px; border:0; border-radius:8px; background:transparent; color:#547663; display:grid; place-items:center; }
+.ghl-password-field button:hover { background:#e9f0e8; }
+.ghl-password-field button:focus-visible,.ghl-submit:focus-visible { outline:3px solid #a2c2a9; outline-offset:3px; }
+.ghl-error { border:1px solid #dfbcb5; background:#fff1ed; padding:11px 13px; border-radius:8px; color:#983d36; font-size:12px; line-height:1.6; margin:17px 0 0; }
+.ghl-submit { margin-top:27px; min-height:57px; padding:14px 18px 14px 21px; width:100%; border:0; border-radius:11px; color:white; background:#1a523a; display:flex; align-items:center; justify-content:space-between; font-size:14px; font-weight:700; cursor:pointer; transition:background .16s,transform .16s; }
+.ghl-submit:hover:not(:disabled) { background:#286a4b; transform:translateY(-1px); }
+.ghl-submit:disabled { opacity:.6; cursor:wait; }
+.ghl-security { display:flex; align-items:flex-start; gap:13px; color:#688074; margin-top:30px; padding-top:24px; border-top:1px solid #d9ded4; }
+.ghl-security svg { flex-shrink:0; margin-top:2px; color:#4d8162; }
+.ghl-security p { margin:0; font-size:11px; line-height:1.8; }
+.ghl-entry-footer { color:#7c8e7d; font-size:10px; }
+.ghl-preview-label { z-index:2; position:fixed; top:12px; right:14px; font:600 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; background:#ead9af; color:#58421b; border-radius:4px; padding:8px 12px; box-shadow:0 2px 12px #0002; }
+.ghl-preview-result { min-height:100vh; background:#f5f4ed; display:grid; place-items:center; padding:24px; font-family:'Be Vietnam Pro',system-ui,sans-serif; }
+.ghl-result-card { max-width:470px; width:100%; background:white; border:1px solid #d8dcd1; border-radius:16px; padding:35px; box-shadow:0 12px 35px #17372c13; color:#17372c; }
+.ghl-result-card h2 { font-family:'Fraunces',Georgia,serif; font-size:32px; margin:18px 0 10px; }
+.ghl-result-card p { font-size:14px; line-height:1.7; color:#607266; }
+.ghl-result-card button,.ghl-result-card a { display:inline-block; margin-top:12px; margin-right:12px; background:#17563d; color:white; padding:12px 17px; border:0; text-decoration:none; border-radius:7px; font-size:13px; cursor:pointer; }
+.ghl-result-card a { background:#e8efe7; color:#17563d; }
+@media(max-width:1000px){ .ghl-shell { grid-template-columns:1fr 1fr; } .ghl-story-inner { padding:30px 26px; } .ghl-entry { padding:30px 30px 25px; } .ghl-story h1 { font-size:clamp(45px,5vw,68px); } .ghl-drawing { margin-top:32px; } }
+@media(max-width:740px){ .ghl-shell { grid-template-columns:1fr; } .ghl-story { min-height:auto; } .ghl-story-inner { min-height:auto; padding:23px 24px 28px; } .ghl-story-copy { padding-top:38px; } .ghl-story h1 { margin:12px 0; font-size:43px; } .ghl-story-desc { font-size:12px; } .ghl-drawing { display:none; } .ghl-story-footer { display:none; } .ghl-entry { padding:22px 24px 25px; } .ghl-entry-top { display:none; } .ghl-form-wrap { padding:35px 0 52px; } .ghl-entry h2 { font-size:47px; } .ghl-form-description { margin-bottom:28px; } .ghl-entry-footer { font-size:9px; } }
+@media(prefers-reduced-motion:reduce){ .ghl-shell *, .ghl-shell *::before,.ghl-shell *::after { transition:none!important; animation:none!important; scroll-behavior:auto!important; } }
