@@ -9,7 +9,7 @@ from app.config import settings
 from app.database import getSession
 from app.models import DeviceConfig, utcNow
 from app.mqtt_client import mqttService
-from app.routers.deps import requireApiKey
+from app.routers.deps import enforce_read, enforce_write
 from app.schemas import ConfigPublished, DeviceConfigOut, DeviceConfigRequest
 from app.services.state import stateService, upsertDeviceConfig
 
@@ -40,7 +40,7 @@ def _toMqttPayload(config: DeviceConfigOut) -> dict:
     }
 
 
-@router.get("/config", response_model=DeviceConfigOut, summary="Doc cau hinh mong muon hien tai")
+@router.get("/config", response_model=DeviceConfigOut, summary="Doc cau hinh mong muon hien tai", dependencies=[Depends(enforce_read)])
 def getConfig(
     deviceId: str = Query(default=settings.device_id),
     session: Session = Depends(getSession),
@@ -56,7 +56,7 @@ def getConfig(
     response_model=ConfigPublished,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Cap nhat cau hinh va publish xuong ESP32",
-    dependencies=[Depends(requireApiKey)],
+    dependencies=[Depends(enforce_write)],
 )
 def postConfig(
     payload: DeviceConfigRequest,

@@ -69,6 +69,7 @@ class Settings:
     # Cookie Secure must be True for HTTPS deployment. False only for localhost.
     auth_cookie_secure: bool = False
     auth_session_hours: int = 8
+    auth_enforcement_enabled: bool = False  # A4.2: OFF until Dashboard ready
     cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
     # No ESP32 reply within this many seconds -> command becomes TIMEOUT (contract 3.5).
     command_timeout_s: int = 5
@@ -106,6 +107,7 @@ def load_settings() -> Settings:
         api_key=os.getenv("API_KEY", "") or "",
         auth_cookie_secure=_read_bool("AUTH_COOKIE_SECURE", False),
         auth_session_hours=max(1, min(24, _read_int("AUTH_SESSION_HOURS", 8))),
+        auth_enforcement_enabled=_read_bool("AUTH_ENFORCEMENT_ENABLED", False),
         cors_origins=tuple(
             o.strip().rstrip("/") for o in os.getenv(
                 "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"

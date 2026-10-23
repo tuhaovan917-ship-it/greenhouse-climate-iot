@@ -13,7 +13,7 @@ from app.models import (
     REASON_MQTT_NOT_CONNECTED,
 )
 from app.mqtt_client import mqttService
-from app.routers.deps import requireApiKey
+from app.routers.deps import enforce_read, enforce_write
 from app.schemas import CommandAccepted, CommandLogList, CommandLogOut, CommandRequest
 from app.services.commands import commandService
 from app.services.state import stateService
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api", tags=["commands"])
     response_model=CommandAccepted,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Gui lenh MANUAL xuong ESP32 qua MQTT",
-    dependencies=[Depends(requireApiKey)],
+    dependencies=[Depends(enforce_write)],
 )
 def postCommand(payload: CommandRequest, session: Session = Depends(getSession)) -> CommandAccepted:
     """Contract 3.5: store PENDING first, then publish, then arm the timeout.
@@ -59,7 +59,7 @@ def postCommand(payload: CommandRequest, session: Session = Depends(getSession))
     return CommandAccepted(command_id=log.command_id)
 
 
-@router.get("/commands", response_model=CommandLogList, summary="Lich su lenh va ket qua")
+@router.get("/commands", response_model=CommandLogList, summary="Lich su lenh va ket qua", dependencies=[Depends(enforce_read)])
 def getCommands(
     deviceId: str = Query(default=settings.device_id),
     limit: int = Query(default=50, ge=1, le=500),

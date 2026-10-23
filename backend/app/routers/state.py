@@ -7,6 +7,7 @@ from sqlmodel import Session
 
 from app.config import settings
 from app.database import getSession
+from app.routers.deps import enforce_read
 from app.models import DeviceState
 from app.schemas import DeviceStateOut
 from app.services.state import stateService
@@ -37,7 +38,7 @@ def _emptyState(deviceId: str) -> DeviceStateOut:
     )
 
 
-@router.get("/state", response_model=DeviceStateOut, summary="Trang thai thuc te cua thiet bi")
+@router.get("/state", response_model=DeviceStateOut, summary="Trang thai thuc te cua thiet bi", dependencies=[Depends(enforce_read)])
 def getState(
     deviceId: str = Query(default=settings.device_id),
     session: Session = Depends(getSession),
