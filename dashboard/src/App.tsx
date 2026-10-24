@@ -86,18 +86,17 @@ function DashboardApp({ readOnly = false }: { readOnly?: boolean } = {}) {
   )
 }
 
-// The secure path is an opt-in end-to-end pilot. / remains the original demo
-// until A6 has completed the strict Backend/Dashboard integration checks.
+// Strict authentication takes precedence over legacy preview routes.
 export default function App() {
-  if (new URLSearchParams(window.location.search).get('preview') === 'login') {
-    return <LoginPreview />
-  }
   if (isSecureDashboardMode()) {
     return (
       <SecureDashboard renderDashboard={(user) => (
         <DashboardApp readOnly={user.role === 'viewer'} />
       )} />
     )
+  }
+  if (new URLSearchParams(window.location.search).get('preview') === 'login') {
+    return <LoginPreview />
   }
   return <DashboardApp />
 }
