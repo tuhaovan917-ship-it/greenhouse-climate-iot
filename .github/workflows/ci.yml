@@ -1,0 +1,96 @@
+name: Greenhouse CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, enhance/auth-rbac]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    env:
+      AUTH_ENFORCEMENT_ENABLED: "0"
+      MQTT_ENABLED: "0"
+      DATABASE_URL: "sqlite:///./ci-tests.db"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest pytest-asyncio httpx
+      - name: Run backend tests
+        run: python -m pytest -q
+
+  dashboard-tests:
+    name: Dashboard (lint, tests, secure build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.2"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install dashboard dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Run dashboard tests in legacy test mode
+        env:
+          VITE_AUTH_GATE_ENABLED: "0"
+        run: npm test
+      - name: Build secure dashboard
+        env:
+          VITE_AUTH_GATE_ENABLED: "1"
+          VITE_API_BASE_URL: http://localhost:8000
+          VITE_WS_URL: ws://localhost:8000/ws
+        run: npm run build
+
+  migration-smoke:
+    name: Database (Alembic migration smoke)
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "sqlite:///./ci-migration.db"
+      MQTT_ENABLED: "0"
+      AUTH_ENFORCEMENT_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install migration dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt -r database/requirements.txt
+      - name: Upgrade disposable SQLite database
+        working-directory: database
+        run: |
+          python -m alembic -c alembic.ini upgrade head
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          path = Path('ci-migration.db')
+          assert path.is_file(), 'Migration did not create SQLite database'
+          with sqlite3.connect(path) as conn:
+              tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              expected = {'users', 'user_sessions', 'audit_logs', 'alembic_version'}
+              assert expected.issubset(tables), f'Missing tables: {expected - tables}'
+              assert conn.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+              assert conn.execute('SELECT version_num FROM alembic_version').fetchone()[0]
+          print('CI_ALEMBIC_MIGRATION_PASS')
+          PY
