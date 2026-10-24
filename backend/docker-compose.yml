@@ -1,5 +1,5 @@
 # Local MQTT broker for the greenhouse demo (Member 2).
-# Anonymous access on 1883 is fine for a classroom LAN demo; the contract
+# MQTT is published to localhost only; anonymous access is for local demo use.
 # switches to mqtts:// + MQTT_USERNAME/MQTT_PASSWORD when TLS is needed.
 services:
   mosquitto:
@@ -7,7 +7,7 @@ services:
     container_name: greenhouse-mosquitto
     restart: unless-stopped
     ports:
-      - "1883:1883"   # plain MQTT, demo
+      - "127.0.0.1:1883:1883"   # localhost only, demo MQTT
       # - "8883:8883" # uncomment together with the TLS listener below
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro

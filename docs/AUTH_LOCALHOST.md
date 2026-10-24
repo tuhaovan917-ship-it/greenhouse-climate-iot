@@ -104,3 +104,13 @@ $env:VITE_WS_URL='ws://localhost:8000/ws'
 - Mosquitto demo cổng `1883` không bật TLS/auth chặt chẽ; không đưa broker ra Internet. Trong Wokwi thiết bị là mô phỏng, không phải phần cứng 12V đã nghiệm thu.
 - Không commit file `.env`, `.db`, `*.db-wal`, `*.db-shm`, session token, CSRF token hay mật khẩu. `VITE_*` là biến có thể hiển thị trong bundle.
 - Giai đoạn A6.4 chỉ chuẩn hóa thao tác vận hành **localhost**. Không ngầm tuyên bố đây là sản phẩm production-ready.
+
+### A6.5.5 - MQTT localhost
+
+- Docker Compose publish MQTT tại `127.0.0.1:1883`, thay vì `0.0.0.0:1883`.
+- Wokwi sử dụng `host.wokwi.internal` để kết nối qua IoT Gateway.
+- Backend kết nối MQTT qua `localhost:1883`.
+- Broker vẫn cho phép kết nối ẩn danh trong môi trường demo.
+- Không dùng cấu hình này để mở MQTT ra LAN hoặc Internet khi chưa có xác thực, ACL và TLS.
+- Kiểm tra Docker bằng `docker port greenhouse-mosquitto 1883/tcp`.
+- Kết quả mong đợi: `127.0.0.1:1883`.
