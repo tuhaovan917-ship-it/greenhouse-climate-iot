@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import timedelta
+from threading import Event
 
 import pytest
 from fastapi import FastAPI
@@ -137,7 +138,31 @@ def test_disabled_user_closes_open_websocket(env):
 
 def test_legacy_mode_remains_available(env, monkeypatch):
     client, _ = env
-    monkeypatch.setattr(wsRouter, "settings", replace(wsRouter.settings, auth_enforcement_enabled=False))
+    monkeypatch.setattr(
+        wsRouter,
+        "settings",
+        replace(wsRouter.settings, auth_enforcement_enabled=False),
+    )
     monkeypatch.setattr(wsRouter, "HEARTBEAT_S", 0.02)
+
+    # Wait for the server to clean up the socket before TestClient exits.
+    # This avoids racing its cancellation of the ASGI task.
+    disconnected = Event()
+    original_disconnect = wsRouter.wsManager.disconnect
+
+    async def observed_disconnect(device_id, websocket):
+        await original_disconnect(device_id, websocket)
+        disconnected.set()
+
+    monkeypatch.setattr(
+        wsRouter.wsManager, "disconnect", observed_disconnect
+    )
+
     with client.websocket_connect("/ws") as ws:
         assert ws.receive_json() == {"type": "ping"}
+
+        # Explicit close, then confirm server-side cleanup.
+        ws.close()
+        assert disconnected.wait(timeout=5), (
+            "Legacy WebSocket did not finish disconnect cleanup"
+        )
