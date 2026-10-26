@@ -93,8 +93,25 @@ def test_signed_in_roles_can_stream(env, monkeypatch, role):
     client, _ = env
     login(client, role)
     monkeypatch.setattr(wsRouter, "HEARTBEAT_S", 0.02)
+
+    # Wait until server-side cleanup finishes before TestClient exits.
+    disconnected = Event()
+    original_disconnect = wsRouter.wsManager.disconnect
+
+    async def observed_disconnect(device_id, websocket):
+        await original_disconnect(device_id, websocket)
+        disconnected.set()
+
+    monkeypatch.setattr(
+        wsRouter.wsManager, "disconnect", observed_disconnect
+    )
+
     with client.websocket_connect("/ws", headers={"Origin": ORIGIN}) as ws:
         assert ws.receive_json() == {"type": "ping"}
+        ws.close()
+        assert disconnected.wait(timeout=5), (
+            "Authenticated WebSocket did not finish disconnect cleanup"
+        )
 
 
 def test_logout_revokes_open_websocket(env):
