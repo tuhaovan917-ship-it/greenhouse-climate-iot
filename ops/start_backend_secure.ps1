@@ -24,6 +24,24 @@ $env:MQTT_ENABLED = '1'
 $env:MQTT_URL = 'mqtt://localhost:1883'
 $env:CORS_ORIGINS = 'http://localhost:5173,http://127.0.0.1:5173'
 
+# Strict localhost: reject outdated or incomplete databases before startup.
+# Never auto-create missing tables on the secure path.
+$env:AUTO_CREATE_TABLES = '0'
+
+$preflight = Join-Path $root 'ops\check_secure_db.py'
+
+if (-not (Test-Path -LiteralPath $preflight -PathType Leaf)) {
+    throw 'A672_PREFLIGHT_SCRIPT_MISSING'
+}
+
+& $python $preflight --db $database
+
+if ($LASTEXITCODE -ne 0) {
+    throw 'A672_SECURE_DB_PREFLIGHT_FAILED'
+}
+
+Write-Host 'A672_SECURE_DB_PREFLIGHT_PASS' -ForegroundColor Green
+
 Write-Host 'A64_BACKEND_STRICT=1 (127.0.0.1:8000)' -ForegroundColor Green
 Write-Host 'A64_DATABASE=backend/greenhouse.db; MQTT_ENABLED=1' -ForegroundColor Green
 & docker compose -p backend -f $compose up -d

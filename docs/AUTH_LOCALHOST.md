@@ -114,3 +114,7 @@ $env:VITE_WS_URL='ws://localhost:8000/ws'
 - Không dùng cấu hình này để mở MQTT ra LAN hoặc Internet khi chưa có xác thực, ACL và TLS.
 - Kiểm tra Docker bằng `docker port greenhouse-mosquitto 1883/tcp`.
 - Kết quả mong đợi: `127.0.0.1:1883`.
+
+## A6.7.2 - SQLite Backup & Recovery
+
+Xem [SQLITE_RECOVERY.md](SQLITE_RECOVERY.md) de backup va phuc hoi SQLite an toan.
