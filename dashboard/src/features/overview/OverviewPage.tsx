@@ -63,6 +63,7 @@ interface OverviewPageProps {
   onHistoryQueryChange?: (query: HistoryQuery) => void
   onRetryHistory?: () => void
   control?: ControlBindings
+  controlReadOnly?: boolean
   alerts?: Alert[]
   realtimeStatus?: 'connecting' | 'connected' | 'polling'
 }
@@ -117,6 +118,7 @@ export function OverviewPage({
   onHistoryQueryChange = () => undefined,
   onRetryHistory = () => undefined,
   control,
+  controlReadOnly = false,
   alerts,
   realtimeStatus,
 }: OverviewPageProps) {
@@ -485,6 +487,7 @@ export function OverviewPage({
 
           {control ? (
             <ControlPanel
+              readOnly={controlReadOnly}
               commands={control.commands}
               config={control.config}
               deviceState={deviceState}

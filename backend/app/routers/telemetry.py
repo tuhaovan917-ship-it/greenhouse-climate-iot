@@ -7,7 +7,7 @@ from sqlmodel import Session
 
 from app.config import settings
 from app.database import getSession
-from app.routers.deps import badRequest
+from app.routers.deps import badRequest, enforce_read
 from app.schemas import TelemetryHistoryResponse, TelemetryOut
 from app.services.telemetry import ScanTooLargeError, parseQueryTime, telemetryService
 
@@ -18,6 +18,7 @@ BUCKET_VALUES = ["raw", "1m", "5m", "1h"]
 
 @router.get(
     "/telemetry",
+    dependencies=[Depends(enforce_read)],
     response_model=TelemetryHistoryResponse,
     summary="Lich su cam bien, ho tro bucket raw|1m|5m|1h",
 )
@@ -58,6 +59,7 @@ def getTelemetryHistory(
 
 @router.get(
     "/telemetry/latest",
+    dependencies=[Depends(enforce_read)],
     response_model=TelemetryOut | None,
     summary="Ban tin cam bien moi nhat (null neu chua co du lieu)",
 )

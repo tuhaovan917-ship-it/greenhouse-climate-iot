@@ -1,5 +1,8 @@
 import { Leaf, LoaderCircle, RefreshCw, ServerOff } from 'lucide-react'
 import { dashboardConfig } from './api/config'
+import { isSecureDashboardMode } from './api/authSession'
+import { SecureDashboard } from './features/auth/SecureDashboard'
+import { LoginPreview } from './features/auth/LoginPreview'
 import { OverviewPage } from './features/overview/OverviewPage'
 import { useGreenhouseDashboard } from './hooks/useGreenhouseDashboard'
 
@@ -42,7 +45,7 @@ function DashboardLoadState({ error, onRetry }: DashboardLoadStateProps) {
   )
 }
 
-export default function App() {
+function DashboardApp({ readOnly = false }: { readOnly?: boolean } = {}) {
   const dashboard = useGreenhouseDashboard({
     deviceId: dashboardConfig.deviceId,
     enabled: true,
@@ -62,6 +65,7 @@ export default function App() {
 
   return (
     <OverviewPage
+      controlReadOnly={readOnly}
       alerts={dashboard.alerts}
       control={{
         config: dashboard.config,
@@ -80,4 +84,19 @@ export default function App() {
       telemetry={dashboard.telemetry}
     />
   )
+}
+
+// Strict authentication takes precedence over legacy preview routes.
+export default function App() {
+  if (isSecureDashboardMode()) {
+    return (
+      <SecureDashboard renderDashboard={(user) => (
+        <DashboardApp readOnly={user.role === 'viewer'} />
+      )} />
+    )
+  }
+  if (new URLSearchParams(window.location.search).get('preview') === 'login') {
+    return <LoginPreview />
+  }
+  return <DashboardApp />
 }

@@ -3,7 +3,7 @@
 **Version:** 0.2.6 (quy tắc `reason` của một lệnh: lệnh mới xóa lý do cũ; đã sửa theo báo cáo của Người 1)
 **Base URL (dev):** `http://localhost:8000`
 **Docs tự sinh:** `http://localhost:8000/docs` (FastAPI Swagger)
-**Liên quan:** `docs/mqtt-protocol.md` v0.1 trên nhánh `feat/esp32` (topics `greenhouse/01/*`, JSON telemetry/state/command/config); `database/SCHEMA.md` v0.2 trên nhánh `feat/dashboard` (5 bảng, index, dedup alert, severity). File này KHÔNG định nghĩa lại MQTT hay schema DB, chỉ định nghĩa REST/WS cho Dashboard React+Vite+TS.
+**Liên quan:** `docs/mqtt-protocol.md` v0.1 trên nhánh `feat/esp32` (topics `greenhouse/01/*`, JSON telemetry/state/command/config); `database/SCHEMA.md` v0.2 trên nhánh `feat/dashboard` (5 bảng nghiệp vụ + 3 bảng auth A6, index, dedup alert, severity). File này KHÔNG định nghĩa lại MQTT hay schema DB, chỉ định nghĩa REST/WS cho Dashboard React+Vite+TS.
 
 > Nguyên tắc (theo báo cáo GĐ2): Dashboard **không nối MQTT trực tiếp**. Mọi dữ liệu/lệnh đi qua Backend. ESP32 không có clock tin cậy nên mọi `receivedAt/updatedAt` đều do Backend sinh (UTC ISO8601).
 
@@ -205,10 +205,60 @@ Quy tắc: mất WS fallback polling `GET /latest` + `GET /state` mỗi 5s; nố
 
 ---
 
-## 5. Auth v0.1
+## 5. Authentication / RBAC — A6 localhost strict
 
-- Localhost demo: để trống.
-- Mở ra LAN: `POST /api/commands` và `POST /api/config` yêu cầu header `X-API-Key` (giá trị trong `.env` `API_KEY`, rỗng = tắt kiểm tra). GET/WS mở. Chưa JWT.
+Phần này mô tả bản A6 trên nhánh `enhance/auth-rbac`.
+Khi `AUTH_ENFORCEMENT_ENABLED=1`, Backend bắt buộc xác thực
+cho REST nghiệp vụ và WebSocket. Đây là cấu hình demo localhost,
+không phải cấu hình production/LAN/Internet.
+
+### 5.1 Session API
+
+- `POST /api/auth/login`: nhận JSON `username`, `password`;
+  trả `user`, `csrfToken` và đặt cookie `greenhouse_session`.
+- `GET /api/auth/me`: yêu cầu session hợp lệ; trả thông tin
+  người dùng và CSRF token để khôi phục phiên sau refresh.
+- `POST /api/auth/logout`: yêu cầu session và header
+  `X-CSRF-Token`; thu hồi session trong database và xóa cookie.
+- Cookie: `HttpOnly`, `SameSite=Lax`, `Path=/`.
+  `AUTH_COOKIE_SECURE=0` chỉ dành cho HTTP localhost;
+  khi chạy HTTPS cần cấu hình cookie Secure.
+- Session token được sinh ngẫu nhiên; database chỉ lưu
+  SHA-256 token hash. Không lưu raw session token ở database.
+- CSRF token được suy ra riêng từ session token, được trả qua
+  login/me và gửi lại trong header của request thay đổi dữ liệu.
+- Login có giới hạn số lần thất bại trong một tiến trình Backend.
+
+### 5.2 Phân quyền
+
+| Vai trò | Đọc telemetry/state/history/alerts/config/commands | POST commands/config |
+| --- | --- | --- |
+| Viewer | Có | Không |
+| Operator | Có | Có, kèm CSRF |
+| Admin | Có | Có, kèm CSRF |
+
+`GET /api/health` vẫn công khai để kiểm tra sức khỏe hệ thống.
+Request nghiệp vụ không có session hợp lệ trả HTTP 401.
+Đủ session nhưng không đủ quyền hoặc sai CSRF trả HTTP 403.
+
+### 5.3 WebSocket
+
+- `WS /ws?deviceId=greenhouse-01` yêu cầu session hợp lệ
+  và role Viewer/Operator/Admin ở chế độ strict.
+- Handshake chỉ chấp nhận Origin trong `CORS_ORIGINS`.
+- Backend kiểm tra lại session khi socket còn mở, đóng với
+  mã 1008 khi phiên bị thu hồi/hết hạn hoặc tài khoản bị khóa.
+- Dashboard không kết nối WebSocket nghiệp vụ trước khi
+  khôi phục hoặc đăng nhập thành công.
+
+### 5.4 Chế độ legacy
+
+Khi `AUTH_ENFORCEMENT_ENABLED=0`, hành vi legacy được giữ lại:
+các GET/WS không yêu cầu session, và POST commands/config
+có thể dùng cơ chế `X-API-Key` cũ nếu đã cấu hình `API_KEY`.
+Không sử dụng chế độ legacy để bảo vệ dữ liệu khi triển khai
+qua LAN hoặc Internet. A6 không triển khai JWT.
+
 
 ## 6. DB workflow (khớp `database/README.md`)
 

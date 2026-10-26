@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import ensureTablesIfAllowed
 from app.mqtt_client import mqttService
+from app.routers import auth as authRouter
 from app.routers import alerts as alertsRouter
 from app.routers import commands as commandsRouter
 from app.routers import config as configRouter
@@ -85,12 +86,13 @@ app = FastAPI(
 # The Dashboard runs on the Vite dev server (localhost:5173).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=list(settings.cors_origins),
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(authRouter.router)
 app.include_router(healthRouter.router)
 app.include_router(telemetryRouter.router)
 app.include_router(stateRouter.router)

@@ -130,6 +130,17 @@ Firmware giả lập dùng Wi-Fi `Wokwi-GUEST`, Broker `host.wokwi.internal:1883
 
 **Lưu ý:** Không chạy `backend/demo_esp32_mock.py` đồng thời với Wokwi sử dụng cùng `deviceId=greenhouse-01`, vì có thể phát hai trạng thái cho cùng một thiết bị.
 
+### 4.8. Khởi động bảo mật bắt buộc trên localhost (A6.4)
+
+Bản nâng cấp trên nhánh `enhance/auth-rbac` sử dụng session cookie, CSRF, RBAC và kiểm tra WebSocket. Sau khi đã tạo tài khoản Admin và cấu hình `.env` riêng trên máy, chạy hai script sau trong **hai cửa sổ PowerShell** ở thư mục gốc:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ops\start_backend_secure.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ops\start_dashboard_secure.ps1
+```
+
+**Không chạy cả hai lệnh trong cùng một tab** vì mỗi server cần chạy liên tục. Hai script cưỡng chế `AUTH_ENFORCEMENT_ENABLED=1` và `VITE_AUTH_GATE_ENABLED=1` cho môi trường localhost; không cần gõ thêm biến môi trường. Hướng dẫn cấu hình, kiểm thử, rollback: [AUTH_LOCALHOST.md](docs/AUTH_LOCALHOST.md). Chế độ này không được thiết kế để public qua LAN/Internet.
+
 ## 5. MQTT và điều khiển
 
 | Topic | Hướng chính | QoS | Retain |

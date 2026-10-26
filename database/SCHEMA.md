@@ -227,3 +227,75 @@ hai constraint `ck_telemetry_humidity_range` và
 7. Alert resolved có thể tái mở thành một đợt mới.
 8. Query history sử dụng đúng composite index.
 9. Chạy thử migration tương đương trên PostgreSQL trước khi tuyên bố chỉ cần đổi `DATABASE_URL`.
+
+
+## 12. Authentication schema — A6
+
+Bên cạnh năm bảng nghiệp vụ ở mục 3–7, A6 bổ sung ba bảng
+xác thực qua SQLModel và Alembic revision `20261022_02`.
+Tổng cộng có tám bảng ứng dụng (không tính `alembic_version`).
+Không dùng `create_all()` để thay thế Alembic migration khi
+triển khai lên database hiện có.
+
+### 12.1 `users`
+
+| Cột | Kiểu | Ghi chú |
+| --- | --- | --- |
+| `id` | varchar(32) | Primary key |
+| `username` | varchar(64) | Unique, lưu dạng chuẩn hóa |
+| `email` | varchar(254) | Unique, lưu dạng chuẩn hóa |
+| `password_hash` | varchar(255) | Argon2id; không trả qua API |
+| `role` | varchar(16) | `admin`, `operator`, `viewer` |
+| `is_active` | boolean | Khóa tài khoản khi false |
+| `created_at` | datetime | Thời điểm tạo, UTC |
+| `updated_at` | datetime | Thời điểm cập nhật, UTC |
+
+Role có CHECK constraint giới hạn ba giá trị hợp lệ.
+
+### 12.2 `user_sessions`
+
+| Cột | Kiểu | Ghi chú |
+| --- | --- | --- |
+| `id` | varchar(32) | Primary key |
+| `user_id` | varchar(32) | Foreign key tới `users.id` |
+| `token_hash` | varchar(64) | SHA-256, unique |
+| `created_at` | datetime | Tạo phiên |
+| `expires_at` | datetime | Hết hạn phiên |
+| `revoked_at` | datetime/null | Thời điểm thu hồi |
+
+Có index trên `user_id`, `expires_at`. Cookie chứa token
+ngẫu nhiên, còn database chỉ giữ hash. Logout đánh dấu
+`revoked_at`; session hết hạn hoặc user bị disable không
+được tiếp tục truy cập REST/WebSocket.
+
+### 12.3 `audit_logs`
+
+| Cột | Kiểu | Ghi chú |
+| --- | --- | --- |
+| `id` | integer | Primary key |
+| `actor_user_id` | varchar(32)/null | FK tới `users.id` |
+| `action` | varchar(64) | Loại hoạt động |
+| `target_type` | varchar(32)/null | Loại đối tượng |
+| `target_id` | varchar(64)/null | Mã đối tượng |
+| `outcome` | varchar(16) | Mặc định `success` |
+| `ip_address` | varchar(64)/null | IP nếu được ghi |
+| `created_at` | datetime | Thời điểm, UTC |
+
+Có index trên `created_at` và `(actor_user_id, created_at)`.
+
+**Giới hạn A6:** bảng `audit_logs` và model đã được tạo,
+nhưng hệ thống chưa triển khai đầy đủ việc ghi sự kiện audit.
+Script `backend/scripts/bootstrap_admin.py` chỉ tạo Admin
+đầu tiên trên database chưa có user. Chưa có luồng quản trị
+hoàn chỉnh để tạo Operator/Viewer, thay role, disable user
+hoặc xem audit logs. Các chức năng này thuộc giai đoạn sau;
+không được mô tả là đã hoàn thành trong PR #6.
+
+### 12.4 Migration / vận hành
+
+- Kiểm tra `alembic_version` đúng head trước khi bật strict.
+- Backup SQLite nhất quán bằng `sqlite3.Connection.backup()`
+  trước khi migrate hoặc restore.
+- Không commit database runtime, mật khẩu, cookie hay token.
+- Chi tiết preflight và script backup/restore sẽ được bổ sung
+  trong đợt hardening vận hành A6.7.2.

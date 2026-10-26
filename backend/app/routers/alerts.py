@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 from app.config import settings
 from app.database import getSession
 from app.models import ALERT_CODES, Alert
-from app.routers.deps import badRequest
+from app.routers.deps import badRequest, enforce_read
 from app.schemas import AlertList, AlertOut
 from app.services.telemetry import parseQueryTime
 
@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api", tags=["alerts"])
 
 @router.get(
     "/alerts",
+    dependencies=[Depends(enforce_read)],
     response_model=AlertList,
     summary="Lich su va canh bao dang active",
 )

@@ -473,12 +473,25 @@ def test_c36_command_history_shape(client: TestClient) -> None:
     assert row["completedAt"] is None
 
 
-def test_c35_duplicate_reply_does_not_push_extra_ws(client: TestClient) -> None:
-    """C3.5: a repeated QoS 1 reply must not emit a second WS message."""
+def test_c35_duplicate_reply_does_not_push_extra_ws(monkeypatch: pytest.MonkeyPatch) -> None:
+    """C3.5: QoS 1 duplicate must not broadcast command_result twice.
+
+    Spy on the outgoing event boundary instead of blocking indefinitely while
+    waiting for an event that correctly does not exist. Other tests exercise
+    real WebSocket connections and session enforcement.
+    """
     import anyio
 
     from app.database import sessionScope as scope
     from app.services.commands import commandService
+    from app.ws_manager import wsManager
+
+    captured: list[tuple[str, dict]] = []
+
+    async def capture_broadcast(device_id: str, message: dict) -> None:
+        captured.append((device_id, message))
+
+    monkeypatch.setattr(wsManager, "broadcast", capture_broadcast)
 
     with scope() as session:
         log = commandService.createPending(session, DEVICE, "fan", False)
@@ -495,26 +508,27 @@ def test_c35_duplicate_reply_does_not_push_extra_ws(client: TestClient) -> None:
         "lastCommandId": commandId,
         "lastCommandResult": "APPLIED",
     }
-    with client.websocket_connect(f"/ws?deviceId={DEVICE}") as socket:
-        anyio.run(lambda: ingest.handleState(DEVICE, payload))
-        first = _receiveType(socket, "command_result")
-        assert first is not None, "phan hoi dau tien phai push"
-        assert first["data"]["wasLate"] is False
 
-        anyio.run(lambda: ingest.handleState(DEVICE, payload))
-        duplicate = _receiveType(socket, "command_result", maxReads=3)
-        assert duplicate is None, "trung lap QoS 1 khong duoc push them"
+    def results_for_command() -> list[dict]:
+        return [
+            message
+            for device_id, message in captured
+            if device_id == DEVICE
+            and message.get("type") == "command_result"
+            and message.get("data", {}).get("commandId") == commandId
+        ]
+
+    anyio.run(lambda: ingest.handleState(DEVICE, payload))
+    first = results_for_command()
+    assert len(first) == 1, "first state must broadcast one command_result"
+    assert first[0]["data"]["result"] == "APPLIED"
+    assert first[0]["data"]["wasLate"] is False
+
+    anyio.run(lambda: ingest.handleState(DEVICE, payload))
+    assert len(results_for_command()) == 1, "duplicate QoS 1 must not broadcast again"
 
     with scope() as session:
         assert commandService.get(session, commandId).status == "APPLIED"
-
-
-def _receiveType(socket, wanted: str, maxReads: int = 6) -> dict | None:  # noqa: ANN001
-    for _ in range(maxReads):
-        message = socket.receive_json()
-        if message.get("type") == wanted:
-            return message
-    return None
 
 
 def test_c35_periodic_state_publish_keeps_reason(client: TestClient) -> None:
