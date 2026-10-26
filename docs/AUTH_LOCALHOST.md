@@ -72,7 +72,7 @@ try {
 }
 ```
 
-Dashboard: `npm run lint`, `npm test`, `$env:VITE_AUTH_GATE_ENABLED='1'; npm run build`. Toàn bộ `113 backend` và `59 dashboard` tests đã PASS ở A6.4.2. Đừng chạy các script integration legacy có gửi lệnh bên ngoài Auth khi đang bật strict trên Backend chính.
+Dashboard: `npm run lint`, `npm test`, `$env:VITE_AUTH_GATE_ENABLED='1'; npm run build`. Toàn bộ `113 backend` và `61 dashboard` tests đã PASS ở A6.4.2. Đừng chạy các script integration legacy có gửi lệnh bên ngoài Auth khi đang bật strict trên Backend chính.
 
 ## Quay lui an toàn về demo legacy (chỉ trên localhost)
 

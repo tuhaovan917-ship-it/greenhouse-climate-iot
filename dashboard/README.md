@@ -58,7 +58,7 @@ Dashboard cần cung cấp các chức năng sau:
 Ngoài phạm vi v0.1:
 
 - Dashboard kết nối MQTT trực tiếp.
-- Quản lý nhiều người dùng hoặc phân quyền phức tạp.
+- Giao diện quản trị vòng đời tài khoản và xem audit logs (RBAC Viewer/Operator/Admin cơ bản đã có ở A6).
 - Tự đưa ra quyết định AUTO thay cho ESP32.
 - Tối ưu ngưỡng theo loại cây trồng.
 
@@ -104,7 +104,7 @@ Ngoài phạm vi v0.1:
 5. `waterOk` có kiểu `boolean | null`: `false` sinh `NO_WATER`; `null` sinh `SENSOR_FAULT` và khóa bơm failsafe.
 6. Contract cung cấp type cho `CommandLog`, `Alert` và WebSocket envelope. Command có thêm trạng thái Backend-side `TIMEOUT` sau 5 giây.
 7. `POST /api/config` trả `202 { status: "PUBLISHED", config: desired }`; đây không phải xác nhận ESP32 đã áp dụng.
-8. Localhost không cần auth; khi mở ra LAN, `POST /api/commands` và `POST /api/config` dùng header `X-API-Key`; chưa dùng JWT.
+8. Mốc v0.1 dùng X-API-Key tùy chọn trong legacy mode. Bản A6 localhost strict sử dụng session cookie, CSRF và RBAC; không dùng JWT.
 
 ## 6. Chi tiết đã được Backend làm rõ ở v0.2.1
 
@@ -164,7 +164,9 @@ UI dùng Tailwind CSS; biểu đồ lịch sử dùng Recharts.
 VITE_API_BASE_URL=http://localhost:8000
 VITE_WS_URL=ws://localhost:8000/ws
 VITE_DEVICE_ID=greenhouse-01
-# Chỉ đặt khi Backend chạy trên LAN và bật API key
+# Bật cổng xác thực của Dashboard A6
+VITE_AUTH_GATE_ENABLED=1
+# Legacy demo only; không dùng API key làm xác thực A6
 VITE_API_KEY=
 ```
 
@@ -205,3 +207,36 @@ npm run build
 ```
 
 Không commit `.env`, `node_modules/` hoặc `dist/`.
+
+
+## 12. Dashboard bảo mật A6
+
+Phần này cập nhật trạng thái triển khai sau các mốc v0.1
+và v0.2.x ở phía trên.
+
+- Chạy localhost secure bằng `ops/start_backend_secure.ps1`
+  và `ops/start_dashboard_secure.ps1` từ thư mục gốc.
+- Backend bật `AUTH_ENFORCEMENT_ENABLED=1`, Dashboard bật
+  `VITE_AUTH_GATE_ENABLED=1`.
+- Mặc định truy cập `/` phải đăng nhập; không còn dùng route
+  preview legacy để bỏ qua Auth Gate khi strict được bật.
+- Đăng nhập qua `POST /api/auth/login`; session được quản lý
+  bằng cookie HttpOnly, không lưu token phiên vào localStorage.
+- Refresh trang gọi `GET /api/auth/me` để khôi phục session;
+  logout gọi `POST /api/auth/logout` với `X-CSRF-Token`.
+- REST nghiệp vụ và WebSocket chỉ khởi chạy sau khi phiên
+  hợp lệ; session hết hạn hoặc bị thu hồi phải quay về Login.
+- Viewer có quyền xem và UI read-only. Operator và Admin
+  có thể gửi yêu cầu cấu hình/điều khiển với CSRF hợp lệ.
+- Backend vẫn thực thi RBAC; khóa nút trên UI không thay thế
+  kiểm tra phân quyền ở server.
+- Biến `VITE_*` được đưa vào frontend bundle; tuyệt đối
+  không đặt mật khẩu hoặc session token trong các biến này.
+- Đã xác nhận 61/61 Dashboard tests, ESLint và secure build
+  trên cấu hình nghiệm thu A6.
+- Quản lý tài khoản Operator/Viewer và hiển thị audit logs
+  chưa có giao diện/API quản trị hoàn chỉnh ở giai đoạn A6.
+- Cấu hình localhost không được xem là production-ready.
+
+Xem `docs/AUTH_LOCALHOST.md`, `docs/api-contract.md` mục 5,
+và `database/SCHEMA.md` mục 12.
