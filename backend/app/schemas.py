@@ -17,6 +17,7 @@ ControlMode = Literal["AUTO", "MANUAL"]
 DeviceName = Literal["fan", "mist", "lamp"]
 CommandStatus = Literal["PENDING", "APPLIED", "REJECTED", "TIMEOUT"]
 TerminalCommandResult = Literal["APPLIED", "REJECTED", "TIMEOUT"]
+TerminalConfigResult = Literal["APPLIED", "REJECTED", "TIMEOUT"]
 Bucket = Literal["raw", "1m", "5m", "1h"]
 AlertCode = Literal["NO_WATER", "SENSOR_FAULT", "OFFLINE"]
 AlertSeverity = Literal["INFO", "WARNING", "CRITICAL"]
@@ -156,10 +157,18 @@ class CommandLogList(CamelModel):
 
 
 class ConfigPublished(CamelModel):
-    """202 body for POST /api/config - published, NOT applied (contract 3.7)."""
+    """202 body for POST /api/config - waiting for ESP32 acknowledgement."""
 
-    status: Literal["PUBLISHED"] = "PUBLISHED"
+    config_id: str
+    status: Literal["PENDING"] = "PENDING"
     config: DeviceConfigOut
+
+class ConfigAckStatus(CamelModel):
+    config_id: str
+    device_id: str
+    status: Literal["PENDING", "APPLIED", "REJECTED", "TIMEOUT"]
+    reason: str | None = None
+    was_late: bool = False
 
 
 class AlertOut(CamelModel):
@@ -185,8 +194,7 @@ class HealthOut(CamelModel):
 
 
 # --- WebSocket envelopes (contract section 4) ---
-# PENDING never appears on the WebSocket: it only exists in the REST 202 body
-# and in GET /api/commands.
+# PENDING never appears on the WebSocket: it only exists in REST responses.
 
 
 class CommandResult(CamelModel):
@@ -209,6 +217,18 @@ class WsStateMessage(CamelModel):
 class WsCommandResultMessage(CamelModel):
     type: Literal["command_result"] = "command_result"
     data: CommandResult
+
+
+class ConfigResult(CamelModel):
+    config_id: str
+    result: TerminalConfigResult
+    reason: str | None = None
+    was_late: bool = False
+
+
+class WsConfigResultMessage(CamelModel):
+    type: Literal["config_result"] = "config_result"
+    data: ConfigResult
 
 
 class WsAlertMessage(CamelModel):

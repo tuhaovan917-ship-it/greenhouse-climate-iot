@@ -72,6 +72,41 @@ bool validStoredThresholds(const StoredAutoThresholds& c) {
            c.lightOnLux < c.lightOffLux;
 }
 
+// A8: Persist candidate thresholds before changing RAM.
+bool saveAutoThresholdsCandidate(
+    const StoredAutoThresholds& candidate
+) {
+    if (!validStoredThresholds(candidate)) {
+        Serial.println("[A8] Invalid candidate thresholds");
+        return false;
+    }
+
+    Preferences prefs;
+
+    if (!prefs.begin("greenhouse", false)) {
+        Serial.println("[A8] NVS open failed");
+        return false;
+    }
+
+    size_t written = prefs.putBytes(
+        "auto_cfg_v1",
+        &candidate,
+        sizeof(candidate)
+    );
+
+    prefs.end();
+
+    bool saved = written == sizeof(candidate);
+
+    Serial.println(
+        saved
+            ? "[A8] Candidate thresholds saved"
+            : "[A8] Candidate NVS write failed"
+    );
+
+    return saved;
+}
+
 bool saveAutoThresholds() {
     StoredAutoThresholds c = {
         1,
@@ -532,6 +567,52 @@ void publishDeviceState() {
     }
 }
 
+// A8: Publish configuration acknowledgement to Backend.
+void publishConfigAck(
+    const String& configId,
+    const char* result,
+    const char* reason
+) {
+    if (!mqttClient.connected()) {
+        Serial.println("[CONFIG] Cannot publish ACK: MQTT offline");
+        return;
+    }
+
+    JsonDocument ack;
+
+    ack["deviceId"] = "greenhouse-01";
+    ack["configId"] = configId;
+    ack["result"] = result;
+
+    if (reason != nullptr && reason[0] != '\0') {
+        ack["reason"] = reason;
+    } else {
+        ack["reason"] = nullptr;
+    }
+
+    char payload[256];
+
+    if (measureJson(ack) >= sizeof(payload)) {
+        Serial.println("[CONFIG] ACK payload too large");
+        return;
+    }
+
+    serializeJson(ack, payload, sizeof(payload));
+
+    bool sent = mqttClient.publish(
+        "greenhouse/01/config/ack",
+        payload,
+        false,
+        1
+    );
+
+    if (sent) {
+        Serial.print("[CONFIG] ACK published: ");
+        Serial.println(payload);
+    } else {
+        Serial.println("[CONFIG] ACK publish failed");
+    }
+}
 
 void handleMqttCommand(byte* payload, unsigned int length) {
     JsonDocument doc;
@@ -654,21 +735,46 @@ void onMqttMessage(MQTTClient* client, char* topic, char* payload, int length) {
     }
 
     JsonDocument doc;
-
-    DeserializationError error =
-        deserializeJson(doc, payload, length);
-
+    DeserializationError error = deserializeJson(doc, payload, length);
     if (error) {
-        Serial.println("[MQTT] Invalid config JSON");
+        // Without valid JSON/configId we cannot correlate an ACK.
+        Serial.println("[A8] Invalid config JSON - no configId to ACK");
         return;
     }
 
+    String configId = doc["configId"].as<String>();
+    if (configId.length() == 0 || configId.length() > 64) {
+        Serial.println("[A8] Missing or invalid configId - config ignored");
+        return;
+    }
+
+    // QoS 1 can redeliver a packet. Cache the final decision in this boot.
+    static String lastConfigId = "";
+    static String lastConfigResult = "";
+    static String lastConfigReason = "";
+
+    if (configId == lastConfigId) {
+        Serial.println("[A8] Duplicate configId - resending cached ACK");
+        publishConfigAck(
+            configId,
+            lastConfigResult.c_str(),
+            lastConfigReason.length() ? lastConfigReason.c_str() : nullptr
+        );
+        return;
+    }
+
+    auto finishConfig = [&](const char* result, const char* reason) {
+        lastConfigId = configId;
+        lastConfigResult = result;
+        lastConfigReason = reason ? reason : "";
+        publishConfigAck(configId, result, reason);
+    };
+
     String requestedMode = doc["mode"].as<String>();
     requestedMode.toUpperCase();
-
-    if (requestedMode != "AUTO" &&
-        requestedMode != "MANUAL") {
-        Serial.println("[MQTT] Invalid control mode");
+    if (requestedMode != "AUTO" && requestedMode != "MANUAL") {
+        Serial.println("[A8] Rejected: invalid mode");
+        finishConfig("REJECTED", "INVALID_MODE");
         return;
     }
 
@@ -676,7 +782,6 @@ void onMqttMessage(MQTTClient* client, char* topic, char* payload, int length) {
     float humidityOnPct, humidityOffPct;
     float lightOnLux, lightOffLux;
 
-    // Doc day du 6 nguong tu MQTT config.
     bool validNumbers =
         readMqttNumber(doc["tempOnC"], tempOnC) &&
         readMqttNumber(doc["tempOffC"], tempOffC) &&
@@ -686,85 +791,65 @@ void onMqttMessage(MQTTClient* client, char* topic, char* payload, int length) {
         readMqttNumber(doc["lightOffLux"], lightOffLux);
 
     if (!validNumbers) {
-        Serial.println("[CONFIG] Invalid or missing thresholds!");
+        Serial.println("[A8] Rejected: missing/invalid thresholds");
+        finishConfig("REJECTED", "INVALID_NUMBERS");
         return;
     }
 
-    // Kiem tra hysteresis va gioi han cam bien.
-    bool validThresholds =
-        tempOnC > tempOffC &&
-        humidityOnPct < humidityOffPct &&
-        lightOnLux < lightOffLux &&
-        humidityOnPct >= 0.0f &&
-        humidityOffPct <= 100.0f &&
-        lightOnLux >= 0.0f &&
-        lightOffLux >= 0.0f;
-
-    if (!validThresholds) {
-        Serial.println("[CONFIG] Threshold validation failed!");
+    StoredAutoThresholds candidate = {
+        1, tempOnC, tempOffC, humidityOnPct, humidityOffPct,
+        lightOnLux, lightOffLux
+    };
+    if (!validStoredThresholds(candidate)) {
+        Serial.println("[A8] Rejected: hysteresis/range violation");
+        finishConfig("REJECTED", "INVALID_THRESHOLDS");
         return;
     }
 
-    // So sanh voi gia tri cu TRUOC khi cap nhat.
     bool thresholdsChanged =
-        FAN_TEMP_ON != tempOnC ||
-        FAN_TEMP_OFF != tempOffC ||
-        PUMP_HUM_ON != humidityOnPct ||
-        PUMP_HUM_OFF != humidityOffPct ||
-        GROWLIGHT_LUX_ON != lightOnLux ||
-        GROWLIGHT_LUX_OFF != lightOffLux;
+        FAN_TEMP_ON != candidate.tempOnC ||
+        FAN_TEMP_OFF != candidate.tempOffC ||
+        PUMP_HUM_ON != candidate.humidityOnPct ||
+        PUMP_HUM_OFF != candidate.humidityOffPct ||
+        GROWLIGHT_LUX_ON != candidate.lightOnLux ||
+        GROWLIGHT_LUX_OFF != candidate.lightOffLux;
 
-    // Chi cap nhat sau khi tat ca gia tri deu hop le.
-    FAN_TEMP_ON = tempOnC;
-    FAN_TEMP_OFF = tempOffC;
-
-    PUMP_HUM_ON = humidityOnPct;
-    PUMP_HUM_OFF = humidityOffPct;
-
-    GROWLIGHT_LUX_ON = lightOnLux;
-    GROWLIGHT_LUX_OFF = lightOffLux;
-
-    if (thresholdsChanged) {
-        saveAutoThresholds();
+    // Persist first; leave RAM, mode and actuator states untouched on failure.
+    if (thresholdsChanged && !saveAutoThresholdsCandidate(candidate)) {
+        Serial.println("[A8] Rejected: NVS write failed");
+        finishConfig("REJECTED", "NVS_WRITE_FAILED");
+        return;
     }
-    Serial.printf(
-        "[CONFIG] AUTO thresholds applied: "
-        "Temp %.1f/%.1f C, "
-        "Humidity %.1f/%.1f %%, "
-        "Light %.1f/%.1f lux\n",
-        FAN_TEMP_ON,
-        FAN_TEMP_OFF,
-        PUMP_HUM_ON,
-        PUMP_HUM_OFF,
-        GROWLIGHT_LUX_ON,
-        GROWLIGHT_LUX_OFF
-    );
+
+    FAN_TEMP_ON = candidate.tempOnC;
+    FAN_TEMP_OFF = candidate.tempOffC;
+    PUMP_HUM_ON = candidate.humidityOnPct;
+    PUMP_HUM_OFF = candidate.humidityOffPct;
+    GROWLIGHT_LUX_ON = candidate.lightOnLux;
+    GROWLIGHT_LUX_OFF = candidate.lightOffLux;
 
     ControlMode nextMode =
         requestedMode == "AUTO" ? MODE_AUTO : MODE_MANUAL;
 
     if (nextMode != currentMode) {
         currentMode = nextMode;
-
-        // Chuyen che do an toan: tat thiet bi truoc.
         manualFanOn = false;
         manualPumpOn = false;
         manualGrowLightOn = false;
-
         fanOn = false;
         pumpOn = false;
         growLightOn = false;
-
         digitalWrite(FAN_PIN, LOW);
         digitalWrite(PUMP_PIN, LOW);
         digitalWrite(GROWLIGHT_PIN, LOW);
     }
 
     Serial.printf(
-        "[MQTT] Control mode applied: %s\n",
-        requestedMode.c_str()
+        "[A8] Config %s APPLIED (mode=%s)\n",
+        configId.c_str(), requestedMode.c_str()
     );
 
+    finishConfig("APPLIED", nullptr);
     pendingStatePublish = true;
 }
 

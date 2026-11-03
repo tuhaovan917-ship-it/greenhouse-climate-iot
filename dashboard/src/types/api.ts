@@ -2,6 +2,8 @@ export type ControlMode = 'AUTO' | 'MANUAL'
 export type DeviceName = 'fan' | 'mist' | 'lamp'
 export type CommandStatus = 'PENDING' | 'APPLIED' | 'REJECTED' | 'TIMEOUT'
 export type TerminalCommandResult = Exclude<CommandStatus, 'PENDING'>
+export type ConfigStatus = 'PENDING' | 'APPLIED' | 'REJECTED' | 'TIMEOUT'
+export type TerminalConfigResult = Exclude<ConfigStatus, 'PENDING'>
 export type Bucket = 'raw' | '1m' | '5m' | '1h'
 export type AggregateBucket = Exclude<Bucket, 'raw'>
 export type AlertCode = 'NO_WATER' | 'SENSOR_FAULT' | 'OFFLINE'
@@ -95,8 +97,24 @@ export interface CommandActivity extends CommandLog {
 }
 
 export interface ConfigPublished {
-  status: 'PUBLISHED'
+  configId: string
+  status: 'PENDING'
   config: DeviceConfig
+}
+
+export interface ConfigAckStatus {
+  configId: string
+  deviceId: string
+  status: ConfigStatus
+  reason?: string | null
+  wasLate: boolean
+}
+
+export interface ConfigResultData {
+  configId: string
+  result: TerminalConfigResult
+  reason?: string | null
+  wasLate: boolean
 }
 
 export interface Alert {
@@ -127,4 +145,5 @@ export type WsMessage =
   | { type: 'state'; data: DeviceState }
   | { type: 'ping' }
   | { type: 'command_result'; data: CommandResultData }
+  | { type: 'config_result'; data: ConfigResultData }
   | { type: 'alert'; data: Alert }

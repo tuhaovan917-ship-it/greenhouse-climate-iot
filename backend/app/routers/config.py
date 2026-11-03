@@ -1,6 +1,7 @@
 """Configuration endpoints: read the desired config, publish a new one."""
 
 from __future__ import annotations
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session
@@ -10,8 +11,14 @@ from app.database import getSession
 from app.models import DeviceConfig, utcNow
 from app.mqtt_client import mqttService
 from app.routers.deps import enforce_read, enforce_write
-from app.schemas import ConfigPublished, DeviceConfigOut, DeviceConfigRequest
+from app.schemas import (
+    ConfigAckStatus,
+    ConfigPublished,
+    DeviceConfigOut,
+    DeviceConfigRequest,
+)
 from app.services.state import stateService, upsertDeviceConfig
+from app.services.config_ack import configAckService
 
 router = APIRouter(prefix="/api", tags=["config"])
 
@@ -27,9 +34,9 @@ DEFAULT_CONFIG = DeviceConfigOut(
 )
 
 
-def _toMqttPayload(config: DeviceConfigOut) -> dict:
-    """Payload for topic `greenhouse/01/config` (mqtt-protocol v0.1)."""
+def _toMqttPayload(config: DeviceConfigOut, configId: str) -> dict:
     return {
+        "configId": configId,
         "mode": config.mode,
         "tempOnC": config.temp_on_c,
         "tempOffC": config.temp_off_c,
@@ -51,6 +58,32 @@ def getConfig(
     return DeviceConfigOut.model_validate(row)
 
 
+@router.get(
+    "/config/status",
+    response_model=ConfigAckStatus,
+    summary="Doc trang thai ACK cua mot lan cap nhat cau hinh",
+    dependencies=[Depends(enforce_read)],
+)
+def getConfigStatus(
+    configId: str = Query(min_length=1, max_length=64),
+) -> ConfigAckStatus:
+    record = configAckService.get(configId)
+
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Khong tim thay configId {configId}",
+        )
+
+    return ConfigAckStatus(
+        config_id=record.config_id,
+        device_id=record.device_id,
+        status=record.result,
+        reason=record.reason,
+        was_late=record.was_late,
+    )
+
+
 @router.post(
     "/config",
     response_model=ConfigPublished,
@@ -63,11 +96,7 @@ def postConfig(
     deviceId: str = Query(default=settings.device_id),
     session: Session = Depends(getSession),
 ) -> ConfigPublished:
-    """Contract 3.7: 202 PUBLISHED only means the Backend published the config.
-
-    The firmware has no `configId` acknowledgement yet, so this endpoint must
-    never claim the ESP32 applied the thresholds.
-    """
+    """Return 202 after publication while the device ACK remains pending."""
     try:
         payload.validateThresholds()
         payload.validateRanges()
@@ -97,14 +126,27 @@ def postConfig(
         },
     )
     session.commit()
+    configId = f"cfg-{uuid.uuid4().hex[:12]}"
+    configAckService.registerPending(
+        deviceId,
+        configId,
+    )
+    if not mqttService.publishConfig(
+        _toMqttPayload(payload, configId)
+    ):
+        configAckService.discard(configId)
 
-    if not mqttService.publishConfig(_toMqttPayload(payload)):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="MQTT chua ket noi, cau hinh chua duoc publish",
         )
 
+    configAckService.scheduleTimeout(configId)
+
     upsertDeviceConfig(session, deviceId, {"published_at": utcNow()})
     session.commit()
 
-    return ConfigPublished(config=DeviceConfigOut.model_validate(row))
+    return ConfigPublished(
+        config_id=configId,
+        config=DeviceConfigOut.model_validate(row),
+    )

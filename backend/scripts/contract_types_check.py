@@ -12,12 +12,11 @@ Usage:
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 CONTRACT = REPO / "docs" / "api-contract.md"
-DASHBOARD_TYPES = "origin/feat/dashboard:dashboard/src/types/api.ts"
+DASHBOARD_TYPES = REPO / "dashboard" / "src" / "types" / "api.ts"
 
 failures: list[str] = []
 
@@ -26,15 +25,6 @@ def check(name: str, condition: bool, detail: str = "") -> None:
     print(f"[{'PASS' if condition else 'FAIL'}] {name}{(' - ' + detail) if detail else ''}")
     if not condition:
         failures.append(name)
-
-
-def readGitFile(ref: str) -> str:
-    result = subprocess.run(
-        ["git", "show", ref], cwd=REPO, capture_output=True, check=False
-    )
-    if result.returncode != 0:
-        raise SystemExit(f"Khong doc duoc {ref}: {result.stderr.decode(errors='replace')}")
-    return result.stdout.decode("utf-8", errors="replace")
 
 
 def contractTypes() -> dict[str, dict[str, str]]:
@@ -47,7 +37,7 @@ def contractTypes() -> dict[str, dict[str, str]]:
 
 
 def dashboardTypes() -> dict[str, dict[str, str]]:
-    return parseInterfaces(readGitFile(DASHBOARD_TYPES))
+    return parseInterfaces(DASHBOARD_TYPES.read_text(encoding="utf-8"))
 
 
 def parseInterfaces(source: str) -> dict[str, dict[str, str]]:
@@ -105,7 +95,7 @@ def main() -> int:
 
     print()
     print("=== 3. KIEU FIELD KHAC NHAU (cung ten, bo qua chi tiet kieu con) ===")
-    dashboardSource = readGitFile(DASHBOARD_TYPES)
+    dashboardSource = DASHBOARD_TYPES.read_text(encoding="utf-8")
     for name in sorted(set(contract) & set(dashboard)):
         for field in sorted(set(contract[name]) & set(dashboard[name])):
             contractType = contract[name][field]
@@ -129,7 +119,7 @@ def main() -> int:
 
     print()
     print("=== 4. TYPE DON (union) ===")
-    for typeName in ("ControlMode", "DeviceName", "CommandStatus", "Bucket", "AlertCode", "AlertSeverity"):
+    for typeName in ("ControlMode", "DeviceName", "CommandStatus", "ConfigStatus", "Bucket", "AlertCode", "AlertSeverity"):
         contractMatch = re.search(
             rf"export type {typeName} =([^;\n]+)", CONTRACT.read_text(encoding="utf-8")
         )

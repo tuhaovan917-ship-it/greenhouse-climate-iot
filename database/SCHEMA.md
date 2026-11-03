@@ -157,10 +157,10 @@ V0.1 thực thi ba ràng buộc hysteresis tại Backend trước khi ghi/publis
 commit `5f04d1e` chưa khai báo chúng thành DB `CheckConstraint`; Alembic không tự
 thêm constraint ngoài single-source metadata.
 
-Quy tắc v0.2:
+Quy tắc v0.2 (historical; A8 supersedes the configuration notes below):
 
 - Firmware hiện chưa có `configId` hoặc payload phản hồi toàn bộ ngưỡng, nên Backend chưa thể khẳng định config đã được áp dụng.
-- `POST /api/config` chỉ trả `PUBLISHED` kèm desired config. Nếu nhóm cần trạng thái `APPLIED/REJECTED`, phải bổ sung acknowledgement và `configId` vào MQTT contract trước.
+- Current A8 behavior: the `device_configs` row is desired configuration, not proof of device application. Successful publication returns `PENDING`; ACK lifecycle records are held in Backend memory and are not persisted in this schema.
 
 ## 8. Alert derivation v0.1
 

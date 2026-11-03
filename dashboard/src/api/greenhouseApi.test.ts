@@ -1,6 +1,14 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getLatestTelemetry, getTelemetryHistory, postCommand } from './greenhouseApi'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  getConfigStatus,
+  getLatestTelemetry,
+  getTelemetryHistory,
+  postCommand,
+  postDeviceConfig,
+} from './greenhouseApi'
 import { ApiError } from './httpClient'
+import { fixtureDeviceConfig } from '../test/fixtures'
+import { setActiveAuth } from './authSession'
 
 function jsonResponse(payload: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(payload), {
@@ -10,8 +18,16 @@ function jsonResponse(payload: unknown, init: ResponseInit = {}) {
   })
 }
 
+beforeEach(() => {
+  setActiveAuth({
+    csrfToken: 'test-csrf-token',
+    user: { id: 'test', username: 'test', email: 'test@example.test', role: 'operator', isActive: true },
+  })
+})
+
 afterEach(() => {
   vi.unstubAllGlobals()
+  setActiveAuth(null)
 })
 
 describe('greenhouseApi', () => {
@@ -68,6 +84,38 @@ describe('greenhouseApi', () => {
       device: 'fan',
       on: true,
     }))
+  })
+
+  it('giữ configId và PENDING từ POST config 202', async () => {
+    const payload = {
+      configId: 'cfg-ui-001',
+      status: 'PENDING',
+      config: fixtureDeviceConfig,
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(payload, { status: 202 })))
+
+    await expect(postDeviceConfig('greenhouse-01', fixtureDeviceConfig)).resolves.toEqual(payload)
+  })
+
+  it('lấy trạng thái Config ACK bằng configId', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      configId: 'cfg-ui-001',
+      deviceId: 'greenhouse-01',
+      status: 'APPLIED',
+      reason: null,
+      wasLate: false,
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getConfigStatus('cfg-ui-001')).resolves.toMatchObject({
+      configId: 'cfg-ui-001',
+      deviceId: 'greenhouse-01',
+      status: 'APPLIED',
+      wasLate: false,
+    })
+    const requestUrl = new URL(String(fetchMock.mock.calls[0][0]))
+    expect(requestUrl.pathname).toBe('/api/config/status')
+    expect(requestUrl.searchParams.get('configId')).toBe('cfg-ui-001')
   })
 
   it('giữ detail của lỗi REST để giao diện giải thích đúng nguyên nhân', async () => {

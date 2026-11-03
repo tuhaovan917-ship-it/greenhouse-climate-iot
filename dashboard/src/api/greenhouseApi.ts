@@ -5,6 +5,7 @@ import type {
   CommandAccepted,
   CommandLogList,
   CommandRequest,
+  ConfigAckStatus,
   ConfigPublished,
   ControlMode,
   DeviceConfig,
@@ -55,6 +56,12 @@ export function getDeviceState(deviceId: string) {
 
 export function getDeviceConfig(deviceId: string) {
   return apiRequest<DeviceConfig>(withQuery('/api/config', { deviceId }))
+}
+
+export function getConfigStatus(configId: string) {
+  return apiRequest<ConfigAckStatus>(
+    withQuery('/api/config/status', { configId }),
+  )
 }
 
 export function getTelemetryHistory<B extends Bucket>({

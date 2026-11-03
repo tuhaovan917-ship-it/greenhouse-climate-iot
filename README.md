@@ -150,8 +150,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ops\start_dashboard_se
 | `greenhouse/01/status` | ESP32 / Last Will → Backend | 1 | Có |
 | `greenhouse/01/command` | Backend → ESP32 | 1 | Không |
 | `greenhouse/01/config` | Backend → ESP32 | 1 | Không |
+| `greenhouse/01/config/ack` | ESP32 → Backend | 1 | Không |
 
-QoS 1 là cơ chế *at least once*: có thể nhận bản tin trùng. Firmware dùng `commandId` để chống thực thi lại lệnh trùng gần nhất. `POST /api/config` trả `PUBLISHED` chỉ có nghĩa Backend đã gửi yêu cầu, không phải ACK xác nhận ESP32 đã áp dụng đầy đủ mọi ngưỡng.
+QoS 1 là cơ chế *at least once*, nên bản tin có thể được gửi lại. Firmware lưu kết quả `configId` gần nhất trong lần boot hiện tại. `POST /api/config` trả HTTP 202 với `configId` và `PENDING`, xác nhận Backend đã publish; REST status và WebSocket `config_result` cung cấp kết quả ACK từ ESP32. Xem [A8 Config ACK](docs/config-ack-a8.md).
 
 Chi tiết: [MQTT Protocol](docs/mqtt-protocol.md), [API Contract](docs/api-contract.md).
 

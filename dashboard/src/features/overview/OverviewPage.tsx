@@ -27,6 +27,7 @@ import { ThemeToggle } from '../../components/ThemeToggle'
 import type {
   CommandActivity,
   CommandRequest,
+  ConfigAckStatus,
   ConfigPublished,
   ControlMode,
   DeviceConfig,
@@ -48,6 +49,7 @@ const TelemetryHistoryPanel = lazy(async () => {
 
 interface ControlBindings {
   config: DeviceConfig
+  configAck: ConfigAckStatus | null
   commands: CommandActivity[]
   onSendCommand: (request: CommandRequest) => Promise<void>
   onPublishMode: (mode: ControlMode) => Promise<ConfigPublished>
@@ -490,6 +492,7 @@ export function OverviewPage({
               readOnly={controlReadOnly}
               commands={control.commands}
               config={control.config}
+              configAck={control.configAck}
               deviceState={deviceState}
               onPublishMode={control.onPublishMode}
               onPublishConfig={control.onPublishConfig}

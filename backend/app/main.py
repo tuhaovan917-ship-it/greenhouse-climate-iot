@@ -35,6 +35,7 @@ from app.services.ingest import (
     handleTelemetry,
     monitorOfflineDevices,
 )
+from app.services.config_ack import configAckService
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -43,14 +44,14 @@ logging.basicConfig(
 logger = logging.getLogger("app")
 
 DESCRIPTION = """
-Backend cho he thong kiem soat khi hau nha kinh (Doi tai 13).
+Backend for greenhouse climate control.
 
-* MQTT: subscribe `greenhouse/01/telemetry|state|status`, publish `.../command|config`.
+* MQTT: subscribes to `greenhouse/01/telemetry|state|status|config/ack`; publishes `.../command|config`.
 * REST: `/api/health`, `/api/telemetry`, `/api/telemetry/latest`, `/api/state`,
-  `/api/commands`, `/api/config`, `/api/alerts`.
-* WebSocket: `/ws` day `telemetry`, `state`, `command_result`, `alert`.
+  `/api/commands`, `/api/config`, `/api/config/status`, `/api/alerts`.
+* WebSocket: `/ws` pushes `telemetry`, `state`, `command_result`, `config_result`, and `alert`.
 
-Hop dong chi tiet: `docs/api-contract.md` v0.2.2.
+Contracts: `docs/api-contract.md` and `docs/config-ack-a8.md`.
 """
 
 
@@ -62,7 +63,13 @@ async def lifespan(_app: FastAPI):
     loop = asyncio.get_running_loop()
     mqttService.bindLoop(loop)
     commandService.bindLoop(loop)
-    mqttService.setHandlers(handleTelemetry, handleState, handleStatus)
+    configAckService.bindLoop(loop)
+    mqttService.setHandlers(
+        handleTelemetry,
+        handleState,
+        handleStatus,
+        configAckService.handleAck,
+    )
     mqttService.start()
 
     monitor = asyncio.create_task(monitorOfflineDevices(), name="offline-monitor")

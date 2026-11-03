@@ -69,6 +69,7 @@ function DashboardApp({ readOnly = false }: { readOnly?: boolean } = {}) {
       alerts={dashboard.alerts}
       control={{
         config: dashboard.config,
+        configAck: dashboard.configAck,
         commands: dashboard.commands,
         onPublishConfig: dashboard.publishConfig,
         onPublishMode: dashboard.publishMode,

@@ -175,7 +175,7 @@ def main() -> int:
             },
             method="POST",
         )
-        check("POST /api/config -> 202 PUBLISHED", status == 202 and body["status"] == "PUBLISHED", str(body)[:80])
+        check("POST /api/config -> 202 PENDING + configId", status == 202 and body.get("status") == "PENDING" and body.get("configId"), str(body)[:80])
 
         manual = False
         deadline = time.time() + 15

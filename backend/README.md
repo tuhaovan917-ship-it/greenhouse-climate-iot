@@ -12,7 +12,7 @@ lenh/cai dat xuong ESP32.
 | Database | SQLite (WAL) mac dinh | doi `DATABASE_URL` sang PostgreSQL khi can |
 | Broker | Eclipse Mosquitto 2.x (Docker) | `mqtt://:1883`, ho tro `mqtts://:8883` |
 
-Hop dong API: [`docs/api-contract.md`](../docs/api-contract.md) **v0.2.2**.
+Hop dong API hien tai: [`docs/api-contract.md`](../docs/api-contract.md); contract Config ACK: [`docs/config-ack-a8.md`](../docs/config-ack-a8.md).
 MQTT payload: [`docs/mqtt-protocol.md`](../docs/mqtt-protocol.md) (nhanh `feat/esp32`).
 Schema DB do **Nguyen 3** so huu trong `database/` (`SCHEMA.md` v0.2 + Alembic).
 
@@ -122,9 +122,10 @@ bom van tat, Dashboard hien canh bao do.
 | POST | `/api/commands` | Gui lenh MANUAL, tra `202 {commandId}` |
 | GET | `/api/commands` | Lich su lenh `PENDING/APPLIED/REJECTED/TIMEOUT` |
 | GET | `/api/config` | Cau hinh mong muon hien tai |
-| POST | `/api/config` | Cap nhat cau hinh, tra `202 PUBLISHED` |
+| GET | `/api/config/status?configId=` | Trang thai ACK: `PENDING/APPLIED/REJECTED/TIMEOUT` |
+| POST | `/api/config` | Cap nhat cau hinh, tra `202 {configId, status: PENDING}` |
 | GET | `/api/alerts?active=&code=` | Lich su + canh bao dang active |
-| WS | `/ws?deviceId=greenhouse-01` | Push `telemetry`, `state`, `command_result`, `alert` |
+| WS | `/ws?deviceId=greenhouse-01` | Push `telemetry`, `state`, `command_result`, `config_result`, `alert` |
 
 Chi tiet request/response va TypeScript types: `docs/api-contract.md` muc 2-4.
 
@@ -168,7 +169,7 @@ Khong can them thu vien gi - dung Swagger + thiet bi ao:
 | 3 | `GET /api/telemetry/latest` | Gia tri cam bien, `receivedAt` ket thuc bang `Z` |
 | 4 | `GET /api/telemetry?bucket=1m` | Envelope `{bucket, data}`, co `sampleCount` |
 | 5 | `GET /api/state` | `online: true`, `lastSeenAt` duoc dien |
-| 6 | `POST /api/config` -> `MANUAL` | `202 {"status":"PUBLISHED", ...}` |
+| 6 | `POST /api/config` -> `MANUAL` | `202 {"configId":"cfg-...", "status":"PENDING"}`; xem kết quả qua `/api/config/status` hoặc WS `config_result` |
 | 7 | `POST /api/commands {"device":"fan","on":true}` | `202 {"status":"PENDING"}` roi `APPLIED` |
 | 8 | Bat lai mock voi `--no-water` | Canh bao `NO_WATER` `CRITICAL`, lenh `mist` bi `REJECTED`, bom van `false` |
 | 9 | `GET /api/commands` | `reason: "NO_WATER"` duoc giu nguyen |
@@ -180,7 +181,7 @@ Mo `http://localhost:8000/docs` de xem va go truc tiep cac request tren.
 ```bash
 pip install pytest pytest-asyncio httpx
 
-pytest -q                              # 54 test: tuong thong contract + REST + review tv3
+pytest -q                              # full backend suite, including A8 Config ACK
 python scripts/e2e_check.py            # REST + WebSocket + ingest
 python scripts/mqtt_check.py           # MQTT that voi broker amqtt
 python scripts/timeout_check.py        # TIMEOUT push WS + late response
@@ -266,6 +267,7 @@ luon chay `alembic upgrade head`.
 | `MQTT_CA_FILE` | rong | CA cho TLS |
 | `MQTT_ENABLED` | `1` | `0` = chi chay REST/WS, khong ket noi broker |
 | `COMMAND_TIMEOUT_S` | `5` | Khong phan hoi -> `TIMEOUT` |
+| `CONFIG_ACK_TIMEOUT_S` | `5` | Het han cho ACK cau hinh tu ESP32 -> `TIMEOUT` |
 | `DEVICE_TIMEOUT_S` | `15` | Khong co tin nhan -> `online=false` |
 | `DATABASE_URL` | `sqlite:///./greenhouse.db` | SQLite hoac PostgreSQL |
 | `MAX_SCAN_ROWS` | `50000` | Vuot qua -> `GET /api/telemetry` tra 400 thay vi cat bom (ESP32 moi 2s -> ~43k dong/24h) |
@@ -307,7 +309,7 @@ Khong commit `.env`, database runtime (`*.db`, `*.db-wal`, `*.db-shm`) hay `cert
 ## 10. Han ch muc v0.2
 
 - Chua co xac thuc nguoi dung (JWT); khi mo LAN dung `API_KEY` cho API ghi.
-- `POST /api/config` chi xac nhan `PUBLISHED`, chua co `configId` de ESP32 ack.
+- Lich su v0.2: `POST /api/config` tra `PUBLISHED` va chua co ACK thiet bi. A8 da thay contract nay bang `configId` va ACK lifecycle; xem [tai lieu A8](../docs/config-ack-a8.md).
 - Chua co bang aggregate; bucket duoc tinh luc query.
 - Chua co retention policy cho telemetry.
 

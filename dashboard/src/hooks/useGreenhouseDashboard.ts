@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   getAlerts,
   getCommands,
+  getConfigStatus,
   getDeviceConfig,
   getDeviceState,
   getLatestTelemetry,
@@ -25,7 +26,9 @@ import type {
   Alert,
   CommandActivity,
   CommandRequest,
+  ConfigAckStatus,
   ConfigPublished,
+  ConfigResultData,
   ControlMode,
   DeviceConfig,
   DeviceState,
@@ -45,13 +48,20 @@ interface UseGreenhouseDashboardOptions {
 
 const pollingIntervalMs = 5_000
 const pendingCommandSyncMs = 1_000
+const pendingConfigSyncMs = 1_000
 const reconnectDelayMs = 3_000
 const historyRefreshMs = 30_000
 const maxBufferedCommandResults = 100
+const maxBufferedConfigResults = 100
 
 interface BufferedCommandResult {
   data: CommandResultData
   receivedAt: string
+}
+
+interface ActiveConfigRequest {
+  configId: string
+  requestId: number
 }
 
 function upsertAlert(current: Alert[], incoming: Alert) {
@@ -95,11 +105,23 @@ export function useGreenhouseDashboard({
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [config, setConfig] = useState<DeviceConfig | null>(null)
+  const [configAck, setConfigAck] = useState<ConfigAckStatus | null>(null)
+  const configAckRef = useRef<ConfigAckStatus | null>(null)
   const [commands, setCommands] = useState<CommandActivity[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const historyRequestId = useRef(0)
   const knownCommandIds = useRef(new Set<string>())
   const bufferedCommandResults = useRef(new Map<string, BufferedCommandResult>())
+  const knownConfigIds = useRef(new Set<string>())
+  const bufferedConfigResults = useRef(new Map<string, ConfigResultData>())
+  const configRequestId = useRef(0)
+  const latestConfigRequestId = useRef(0)
+  const activeConfigRequest = useRef<ActiveConfigRequest | null>(null)
+
+  const updateConfigAck = useCallback((next: ConfigAckStatus) => {
+    configAckRef.current = next
+    setConfigAck(next)
+  }, [])
 
   const reconcileCommands = useCallback((incoming: CommandActivity[]) => {
     incoming.forEach((command) => knownCommandIds.current.add(command.commandId))
@@ -281,6 +303,34 @@ export function useGreenhouseDashboard({
         return
       }
 
+      if (message.type === 'config_result') {
+        const active = activeConfigRequest.current
+        if (knownConfigIds.current.has(message.data.configId)) {
+          if (
+            active?.configId === message.data.configId &&
+            active.requestId === latestConfigRequestId.current
+          ) {
+            updateConfigAck({
+              configId: message.data.configId,
+              deviceId,
+              status: message.data.result,
+              reason: message.data.reason ?? null,
+              wasLate: message.data.wasLate,
+            })
+          }
+          return
+        }
+
+        bufferedConfigResults.current.set(message.data.configId, message.data)
+        if (bufferedConfigResults.current.size > maxBufferedConfigResults) {
+          const oldestConfigId = bufferedConfigResults.current.keys().next().value
+          if (oldestConfigId) {
+            bufferedConfigResults.current.delete(oldestConfigId)
+          }
+        }
+        return
+      }
+
       if (message.type === 'alert') {
         setAlerts((current) => upsertAlert(current, message.data))
       }
@@ -330,7 +380,7 @@ export function useGreenhouseDashboard({
 
       socket?.close()
     }
-  }, [deviceId, enabled, refreshSnapshot, status])
+  }, [deviceId, enabled, refreshSnapshot, status, updateConfigAck])
 
   const hasPendingCommands = commands.some((command) => command.status === 'PENDING')
 
@@ -390,10 +440,46 @@ export function useGreenhouseDashboard({
   }, [])
 
   const publishConfig = useCallback(async (nextConfig: DeviceConfig): Promise<ConfigPublished> => {
-    const published = await postDeviceConfig(deviceId, nextConfig)
-    setConfig(published.config)
+    const requestId = configRequestId.current + 1
+    configRequestId.current = requestId
+    latestConfigRequestId.current = requestId
+
+    let published: ConfigPublished
+    try {
+      published = await postDeviceConfig(deviceId, nextConfig)
+    } catch (publishError) {
+      if (latestConfigRequestId.current === requestId && activeConfigRequest.current) {
+        latestConfigRequestId.current = activeConfigRequest.current.requestId
+      }
+      throw publishError
+    }
+
+    knownConfigIds.current.add(published.configId)
+    if (requestId === latestConfigRequestId.current) {
+      activeConfigRequest.current = { configId: published.configId, requestId }
+      setConfig(published.config)
+      const bufferedResult = bufferedConfigResults.current.get(published.configId)
+      bufferedConfigResults.current.delete(published.configId)
+      updateConfigAck(bufferedResult
+        ? {
+            configId: published.configId,
+            deviceId,
+            status: bufferedResult.result,
+            reason: bufferedResult.reason ?? null,
+            wasLate: bufferedResult.wasLate,
+          }
+        : {
+            configId: published.configId,
+            deviceId,
+            status: 'PENDING',
+            reason: null,
+            wasLate: false,
+          })
+    } else {
+      bufferedConfigResults.current.delete(published.configId)
+    }
     return published
-  }, [deviceId])
+  }, [deviceId, updateConfigAck])
 
   const publishMode = useCallback(async (mode: ControlMode): Promise<ConfigPublished> => {
     if (!config) {
@@ -402,6 +488,44 @@ export function useGreenhouseDashboard({
 
     return publishConfig(withMode(config, mode))
   }, [config, publishConfig])
+
+  useEffect(() => {
+    const configId = configAck?.configId
+    if (!enabled || status !== 'ready' || !configId || configAck.status !== 'PENDING') {
+      return
+    }
+
+    const poll = async () => {
+      const active = activeConfigRequest.current
+      if (
+        active?.configId !== configId ||
+        active.requestId !== latestConfigRequestId.current
+      ) {
+        return
+      }
+
+      try {
+        const ackAtRequest = configAckRef.current
+        const result = await getConfigStatus(configId)
+        const latest = activeConfigRequest.current
+        if (
+          latest?.configId === configId &&
+          latest.requestId === latestConfigRequestId.current &&
+          ackAtRequest?.status === 'PENDING' &&
+          configAckRef.current?.configId === configId &&
+          configAckRef.current.status === 'PENDING'
+        ) {
+          updateConfigAck(result)
+        }
+      } catch {
+        // WebSocket is the realtime path; keep polling through transient REST failures.
+      }
+    }
+
+    void poll()
+    const timer = window.setInterval(() => void poll(), pendingConfigSyncMs)
+    return () => window.clearInterval(timer)
+  }, [configAck?.configId, configAck?.status, enabled, status, updateConfigAck])
 
   return {
     status,
@@ -414,6 +538,7 @@ export function useGreenhouseDashboard({
     historyLoading,
     historyError,
     config,
+    configAck,
     commands,
     alerts,
     retry: loadInitial,

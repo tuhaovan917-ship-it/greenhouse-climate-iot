@@ -166,7 +166,7 @@ def main() -> int:
         },
         method="POST",
     )
-    check("config POST -> 202 PUBLISHED", status == 202 and body.get("status") == "PUBLISHED", f"{status} {str(body)[:90]}")
+    check("config POST -> 202 PENDING + configId", status == 202 and body.get("status") == "PENDING" and body.get("configId"), f"{status} {str(body)[:90]}")
 
     status, body = call(
         "/api/commands",

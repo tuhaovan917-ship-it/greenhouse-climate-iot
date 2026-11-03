@@ -5,7 +5,6 @@ import {
   Fan,
   Lightbulb,
   LoaderCircle,
-  RadioTower,
   ShieldAlert,
   SlidersHorizontal,
   TimerOff,
@@ -16,6 +15,7 @@ import { StatusBadge } from '../../components/StatusBadge'
 import type {
   CommandActivity,
   CommandRequest,
+  ConfigAckStatus,
   ConfigPublished,
   ControlMode,
   DeviceConfig,
@@ -30,6 +30,7 @@ interface ControlPanelProps {
   telemetry: Telemetry | null
   deviceState: DeviceState
   config: DeviceConfig
+  configAck: ConfigAckStatus | null
   commands: CommandActivity[]
   onSendCommand: (request: CommandRequest) => Promise<void>
   onPublishMode: (mode: ControlMode) => Promise<ConfigPublished>
@@ -81,6 +82,24 @@ const reasonLabels: Record<string, string> = {
   DEVICE_OFFLINE: 'Thiết bị đang ngoại tuyến',
   MQTT_NOT_CONNECTED: 'Backend chưa kết nối MQTT',
   TIMEOUT: 'Không nhận được phản hồi sau thời hạn',
+  NVS_WRITE_FAILED: 'ESP32 không lưu được cấu hình vào bộ nhớ.',
+}
+
+function configAckMessage(configAck: ConfigAckStatus) {
+  if (configAck.status === 'PENDING') {
+    return 'Đang chờ ESP32 xác nhận cấu hình…'
+  }
+  if (configAck.status === 'APPLIED') {
+    return configAck.wasLate
+      ? 'ESP32 đã áp dụng cấu hình — phản hồi đến sau khi Backend đã timeout.'
+      : 'ESP32 đã áp dụng cấu hình.'
+  }
+  if (configAck.status === 'TIMEOUT') {
+    return 'Quá thời gian chờ ESP32 xác nhận cấu hình.'
+  }
+
+  const reason = configAck.reason?.trim()
+  return `ESP32 từ chối cấu hình: ${reason ? reasonLabels[reason] ?? reason : 'không có lý do được cung cấp'}`
 }
 
 const thresholdFields: Array<{
@@ -206,6 +225,7 @@ export function ControlPanel({
   telemetry,
   deviceState,
   config,
+  configAck,
   commands,
   onSendCommand,
   onPublishMode,
@@ -215,9 +235,10 @@ export function ControlPanel({
   const [publishingMode, setPublishingMode] = useState(false)
   const [publishingThresholds, setPublishingThresholds] = useState(false)
   const [thresholdDraft, setThresholdDraft] = useState<ThresholdDraft>(() => configToDraft(config))
-  const [modeNotice, setModeNotice] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const awaitingModeConfirmation = config.mode !== deviceState.mode
+  const configPending = configAck?.status === 'PENDING'
+  const configRejectedOrTimedOut = configAck?.status === 'REJECTED' || configAck?.status === 'TIMEOUT'
+  const awaitingModeConfirmation = config.mode !== deviceState.mode && !configRejectedOrTimedOut
   const needsAutoReconciliation =
     config.mode === 'MANUAL' && deviceState.mode === 'AUTO'
 
@@ -262,14 +283,10 @@ export function ControlPanel({
       ? 'AUTO'
       : deviceState.mode === 'AUTO' ? 'MANUAL' : 'AUTO'
     setPublishingMode(true)
-    setModeNotice(null)
     setErrorMessage(null)
 
     try {
-      const response = await onPublishMode(nextMode)
-      setModeNotice(
-        `Đã publish yêu cầu ${response.config.mode}. Đang chờ trạng thái thực tế từ ESP32.`,
-      )
+      await onPublishMode(nextMode)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Không thể publish cấu hình')
     } finally {
@@ -280,7 +297,6 @@ export function ControlPanel({
   async function handleThresholdSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (readOnly) return
-    setModeNotice(null)
     setErrorMessage(null)
 
     const parsed = parseThresholdDraft(thresholdDraft, config.mode)
@@ -293,7 +309,6 @@ export function ControlPanel({
     try {
       const response = await onPublishConfig(parsed.config)
       setThresholdDraft(configToDraft(response.config))
-      setModeNotice('Đã publish các ngưỡng mới. Firmware chưa có configId nên Dashboard chưa thể xác nhận đã áp dụng.')
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Không thể publish cấu hình ngưỡng')
     } finally {
@@ -331,7 +346,7 @@ export function ControlPanel({
                   readOnly ||
                   !deviceState.online ||
                   publishingMode ||
-                  (awaitingModeConfirmation && !needsAutoReconciliation)
+                  configPending || (awaitingModeConfirmation && !needsAutoReconciliation)
                 }
                 onClick={handleModeChange}
                 type="button"
@@ -346,15 +361,40 @@ export function ControlPanel({
               </button>
             </div>
             <p className="mt-3 text-[0.68rem] leading-5 text-slate-500 dark:text-slate-400">
-              Desired config hiện tại: {config.mode}. PUBLISHED chưa đồng nghĩa ESP32 đã áp dụng.
+              Desired config hiện tại: {config.mode}. Chế độ thực tế bên trên đến từ ESP32.
             </p>
           </div>
         </div>
 
-        {modeNotice ? (
-          <div className="flex items-start gap-2 border-b border-sky-700/15 bg-sky-50/80 px-5 py-3 text-xs text-sky-900 dark:border-sky-300/10 dark:bg-sky-300/[0.06] dark:text-sky-200 sm:px-6">
-            <RadioTower aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>{modeNotice}</p>
+        {configAck ? (
+          <div
+            aria-live="polite"
+            className={`flex items-start gap-2 border-b px-5 py-3 text-xs sm:px-6 ${
+              configAck.status === 'APPLIED'
+                ? 'border-emerald-700/15 bg-emerald-50/80 text-emerald-900 dark:border-emerald-300/10 dark:bg-emerald-300/[0.06] dark:text-emerald-200'
+                : configAck.status === 'REJECTED'
+                  ? 'border-red-700/15 bg-red-50/80 text-red-900 dark:border-red-300/10 dark:bg-red-300/[0.06] dark:text-red-200'
+                  : 'border-amber-700/15 bg-amber-50/80 text-amber-950 dark:border-amber-300/10 dark:bg-amber-300/[0.06] dark:text-amber-100'
+            }`}
+            data-testid="config-ack-status"
+            data-status={configAck.status}
+          >
+            {configAck.status === 'PENDING' ? (
+              <LoaderCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+            ) : configAck.status === 'APPLIED' ? (
+              <CheckCircle2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : configAck.status === 'REJECTED' ? (
+              <XCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : (
+              <TimerOff aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            )}
+            <div>
+              <p>{configAckMessage(configAck)}</p>
+              {configAck.wasLate ? (
+                <p className="mt-1 font-semibold">Phản hồi trễ</p>
+              ) : null}
+              <p className="mt-1 text-[0.65rem] opacity-75">Config ID: {configAck.configId}</p>
+            </div>
           </div>
         ) : null}
 
@@ -428,7 +468,7 @@ export function ControlPanel({
             </button>
             <button
               className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 dark:bg-emerald-300 dark:text-emerald-950 dark:hover:bg-emerald-200 dark:disabled:bg-white/[0.06] dark:disabled:text-slate-500"
-              disabled={readOnly || !deviceState.online || publishingThresholds}
+              disabled={readOnly || !deviceState.online || publishingThresholds || configPending}
               type="submit"
             >
               {publishingThresholds ? (

@@ -1,4 +1,4 @@
-"""Cross-check the MQTT payload keys against docs/mqtt-protocol.md v0.1.
+"""Cross-check the MQTT payload keys against the current protocol document.
 
 The Backend publishes `command` and `config` and consumes `telemetry`, `state`
 and `status`. This script compares the keys used in the code with the keys
@@ -55,16 +55,9 @@ def codeKeys(fileName: str, pattern: str) -> set[str]:
 
 
 def _firmwareSource() -> str:
-    """Firmware main.cpp from the esp32 branch (it carries the MQTT client)."""
-    result = subprocess.run(
-        ["git", "show", "origin/feat/esp32:firmware/src/main.cpp"],
-        cwd=REPO,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return ""
-    return result.stdout.decode("utf-8", errors="replace")
+    """Read the current firmware implementation from this worktree."""
+    path = REPO / "firmware" / "src" / "main.cpp"
+    return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
 def main() -> int:
@@ -113,17 +106,17 @@ def main() -> int:
 
     # Topics
     mqttText = (REPO / "backend" / "app" / "mqtt_client.py").read_text(encoding="utf-8")
-    for topic in ("telemetry", "state", "status", "command", "config"):
+    for topic in ("telemetry", "state", "status", "command", "config", "config/ack"):
         check(
             f"topic greenhouse/01/{topic} used by the Backend",
             f'f"{{self._prefix}}/{topic}"' in mqttText or f'PREFIX}}/{topic}"' in mqttText,
         )
 
     print()
-    print("=== 6. FIRMWARE (feat/esp32) ===")
+    print("=== 6. FIRMWARE (current worktree) ===")
     firmware = _firmwareSource()
     if not firmware:
-        check("firmware main.cpp doc duoc", False, "khong lay duoc tu origin/feat/esp32")
+        check("firmware main.cpp doc duoc", False, "local firmware/src/main.cpp is missing")
     else:
         for key in ("deviceId", "temperatureC", "humidityPct", "lightLux", "waterOk"):
             check(

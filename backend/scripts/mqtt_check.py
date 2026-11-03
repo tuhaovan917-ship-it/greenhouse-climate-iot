@@ -263,17 +263,20 @@ async def main() -> int:
                     "lightOffLux": 650,
                 },
             )
-            check("POST /api/config -> 202 PUBLISHED", published.status_code == 202, str(published.status_code))
+            check("POST /api/config -> 202", published.status_code == 202, str(published.status_code))
             check(
-                "config status is PUBLISHED (not applied)",
-                published.json().get("status") == "PUBLISHED",
+                "config response is PENDING with configId",
+                published.json().get("status") == "PENDING" and bool(published.json().get("configId")),
                 str(published.json())[:80],
             )
             check("config reached the device", await waitFor(lambda: bool(configMessages)), str(configMessages))
             if configMessages:
+                check("configId matches POST response", configMessages[0].get("configId") == published.json().get("configId"))
+            if configMessages:
                 check(
                     "config payload uses camelCase MQTT keys",
                     set(configMessages[0]) == {
+                        "configId",
                         "mode",
                         "tempOnC",
                         "tempOffC",

@@ -92,6 +92,30 @@ export interface DeviceConfig {
 }
 // Ràng buộc: tempOnC > tempOffC, humidityOnPct < humidityOffPct, lightOnLux < lightOffLux
 
+export type ConfigStatus = "PENDING" | "APPLIED" | "REJECTED" | "TIMEOUT";
+export type TerminalConfigResult = Exclude<ConfigStatus, "PENDING">;
+
+export interface ConfigPublished {
+  configId: string;
+  status: "PENDING";
+  config: DeviceConfig;
+}
+
+export interface ConfigAckStatus {
+  configId: string;
+  deviceId: string;
+  status: ConfigStatus;
+  reason?: string | null;
+  wasLate: boolean;
+}
+
+export interface ConfigResultData {
+  configId: string;
+  result: TerminalConfigResult;
+  reason?: string | null;
+  wasLate: boolean;
+}
+
 export interface CommandLog {
   commandId: string;
   deviceId: string;
@@ -126,8 +150,9 @@ export type WsMessage =
   | { type: "state"; data: DeviceState }
   | { type: "ping" } // heartbeat từ server (v0.2.4), Dashboard bỏ qua
   | { type: "command_result"; data: { commandId: string; result: TerminalCommandResult; reason?: string | null; wasLate?: boolean } }
+  | { type: "config_result"; data: ConfigResultData }
   | { type: "alert"; data: Alert };
-// Quy ước: PENDING chỉ xuất hiện ở REST 202 + GET /commands, không bao giờ xuất hiện trong WS command_result hay state.lastCommandResult.
+// Config/command PENDING is REST-only; WebSocket result messages carry terminal statuses.
 ```
 
 ---
@@ -177,9 +202,10 @@ ESP32 chỉ thực thi khi đang `MANUAL` + qua kiểm tra an toàn, phản hồ
 Lịch sử lệnh (`PENDING/APPLIED/REJECTED/TIMEOUT`, `reason`). Dùng hiện toast/log.
 
 ### 3.7 `GET /api/config?deviceId=greenhouse-01` / `POST /api/config`
-Xem/sửa cấu hình mong muốn (mode + ngưỡng hysteresis). Body giống `DeviceConfig`. Backend validate ràng buộc ngưỡng, lưu `device_configs` (`updatedAt` = giờ nhận REST, `publishedAt` = giờ publish), publish MQTT `greenhouse/01/config` (QoS 1, retain false).
-Trả về `202`: `{ "status": "PUBLISHED", "config": { ...desired } }` — **chỉ xác nhận Backend đã publish, chưa khẳng định ESP32 đã áp dụng**, vì firmware hiện chưa có `configId`/payload ack toàn bộ ngưỡng (xem `SCHEMA.md` §7). Dashboard theo dõi `GET /state` đổi `mode` để suy ra, không coi `PUBLISHED` là đã áp dụng. Muốn ack đầy đủ phải sửa MQTT contract thêm `configId`.
-Ngưỡng test mặc định: `tempOn 30 / tempOff 28, humOn 55 / humOff 65, lightOn 300 / lightOff 700`.
+
+`GET /api/config` reads the latest desired configuration. `POST /api/config` validates and stores the desired configuration, publishes `greenhouse/01/config` at QoS 1 with `retain=false`, and returns HTTP `202` with `{ "configId": "cfg-...", "status": "PENDING", "config": { ... } }`. This response confirms Backend publication, not device application.
+
+`GET /api/config/status?configId=...` returns `configId`, `deviceId`, `status`, `reason`, and `wasLate`. Status is `PENDING`, `APPLIED`, `REJECTED`, or `TIMEOUT`; an unknown ID returns `404`. A late device ACK can replace `TIMEOUT` with `APPLIED` or `REJECTED` and `wasLate: true`. The detailed current REST, MQTT, firmware, and WebSocket contract is in [A8 Config ACK](config-ack-a8.md).
 
 ### 3.8 `GET /api/alerts?deviceId=&active=&code=&from=&to=&limit=50`
 Lịch sử + hiện tại cảnh báo (`NO_WATER`, `SENSOR_FAULT`, `OFFLINE`). WS `alert` chỉ realtime, REST mới khôi phục sau reload/reconnect. Quy tắc dedup theo `SCHEMA.md` §6: cùng `device_id + code` thì update alert active (`lastSeenAt`), hết điều kiện thì `active=false + resolvedAt`, tái diễn tạo đợt mới. Demo đóng immediate, bản cuối yêu cầu 3 mẫu tốt liên tiếp (tv2/tv3 chốt sau).
@@ -190,6 +216,8 @@ Lịch sử + hiện tại cảnh báo (`NO_WATER`, `SENSOR_FAULT`, `OFFLINE`). 
 
 ### `WS /ws?deviceId=greenhouse-01`
 1 socket duy nhất, message theo `WsMessage` (mục 2). `command_result.result` chỉ nhận `APPLIED | REJECTED | TIMEOUT` (không nhận `PENDING`). Ví dụ rút gọn:
+`config_result` carries terminal Config ACK transitions (`APPLIED`, `REJECTED`, `TIMEOUT`); `PENDING` is not broadcast. A late ACK sends a later event with `wasLate: true`. See [A8 Config ACK](config-ack-a8.md).
+
 ```json
 { "type": "state", "data": { "deviceId": "greenhouse-01", "mode": "MANUAL", "fan": true, "online": true, "lastSeenAt": "...", "updatedAt": "..." } }
 { "type": "command_result", "data": { "commandId": "cmd-a1b2", "result": "APPLIED", "wasLate": false } }
@@ -272,6 +300,7 @@ qua LAN hoặc Internet. A6 không triển khai JWT.
 |---|---|---|
 | `POST /api/commands` | sinh `commandId`, ghi `PENDING` | pub `greenhouse/01/command` |
 | `POST /api/config` | validate ngưỡng, lưu desired, ghi `publishedAt` | pub `greenhouse/01/config` |
+| `GET /api/config/status` | read ACK lifecycle by `configId` | in-memory Backend record |
 | `GET /state`, `WS state` | cache bản tin cuối + `online/lastSeenAt` | sub `greenhouse/01/state` (QoS 1, retain true) |
 | `GET /telemetry`, `WS telemetry` | insert DB + `receivedAt` | sub `greenhouse/01/telemetry` (QoS 0) |
 | Online/offline, alert `OFFLINE` | LWT + timeout 15s | sub `greenhouse/01/status` (retain true, `{"online":bool}`) |
@@ -287,6 +316,8 @@ Idempotency: MQTT QoS 1 có thể trùng, ESP32 de-dupe theo `commandId`. `comma
 - Chạy không cần ESP32 thật: `python backend/demo_esp32_mock.py [--no-water]` publish telemetry/state giả lên Mosquitto local.
 
 ---
+
+A8 supersedes the v0.2 `PUBLISHED`-only configuration contract; the entries below are retained as historical change notes.
 
 ## 9. Thay đổi ở v0.2 / v0.2.1 (khóa với tv3)
 

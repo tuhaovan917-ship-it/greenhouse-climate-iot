@@ -126,7 +126,7 @@ async def main() -> int:
                     "lightOffLux": 700,
                 },
             )
-            check("config 202 PUBLISHED", published.status_code == 202, str(published.status_code))
+            check("config 202 PENDING + configId", published.status_code == 202 and published.json().get("status") == "PENDING" and published.json().get("configId"), str(published.json())[:90])
             check("mock applied MANUAL", await waitFor(lambda: bool(state(client)) and state(client)["mode"] == "MANUAL"))
 
             command = client.post(

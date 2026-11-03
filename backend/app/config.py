@@ -73,6 +73,7 @@ class Settings:
     cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
     # No ESP32 reply within this many seconds -> command becomes TIMEOUT (contract 3.5).
     command_timeout_s: int = 5
+    config_ack_timeout_s: int = 5
     # No valid MQTT message from a device for this many seconds -> online=false (contract 3.4).
     device_timeout_s: int = 15
     mqtt: MqttSettings = field(default_factory=MqttSettings)
@@ -114,6 +115,7 @@ def load_settings() -> Settings:
             ).split(",") if o.strip()
         ),
         command_timeout_s=_read_int("COMMAND_TIMEOUT_S", 5),
+        config_ack_timeout_s=_read_int("CONFIG_ACK_TIMEOUT_S", 5),
         device_timeout_s=_read_int("DEVICE_TIMEOUT_S", 15),
         mqtt=mqtt,
         max_scan_rows=_read_int("MAX_SCAN_ROWS", Settings.max_scan_rows),

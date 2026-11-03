@@ -1,6 +1,6 @@
 # Quy ước giao tiếp MQTT – Greenhouse Climate IoT
 
-**Phiên bản:** 0.1 (bản đề xuất, cần cả nhóm xác nhận trước khi triển khai)
+**Phiên bản:** 0.1 baseline. A8 supersedes its configuration request/ACK details; see [A8 Config ACK](config-ack-a8.md).
 
 ## 1. Nguyên tắc kiến trúc
 
@@ -20,6 +20,7 @@ Mã nhà kính giả lập: `01`; thống nhất tiền tố `greenhouse/01/`.
 | `greenhouse/01/status` | ESP32/MQTT Broker → Backend | Online/offline, hỗ trợ Last Will (LWT) | 1 | Có |
 | `greenhouse/01/command` | Backend → ESP32 | Yêu cầu điều khiển MANUAL | 1 | **Không** |
 | `greenhouse/01/config` | Backend → ESP32 | Thay đổi AUTO/MANUAL và ngưỡng | 1 | Không |
+| `greenhouse/01/config/ack` | ESP32 → Backend | Kết quả áp dụng theo `configId` | 1 | Không |
 
 > Lưu ý: MQTT QoS 1 có thể phát trùng bản tin. ESP32 xử lý lệnh theo `commandId` để tránh thực hiện trùng. Không dùng retained message cho `command` để tránh nhận lại lệnh cũ sau khi kết nối lại.
 
@@ -91,22 +92,37 @@ Cả hai bản tin dùng `retain=true`. Backend có thể bổ sung cơ chế ph
 
 ### 3.5. Backend gửi `config`
 
+Topic `greenhouse/01/config`, QoS 1, `retain=false`. The current request includes the Backend-generated `configId`:
+
 ```json
 {
+  "configId": "cfg-...",
   "mode": "AUTO",
   "tempOnC": 30,
   "tempOffC": 28,
-  "humidityOnPct": 60,
-  "humidityOffPct": 70,
+  "humidityOnPct": 55,
+  "humidityOffPct": 65,
   "lightOnLux": 300,
-  "lightOffLux": 500
+  "lightOffLux": 700
 }
 ```
 
-- Các ngưỡng ở trên **chỉ là ví dụ để kiểm thử**, không phải ngưỡng tối ưu đã được xác nhận cho cây trồng.
-- Điều kiện hợp lệ: `tempOnC > tempOffC`, `humidityOnPct < humidityOffPct`, `lightOnLux < lightOffLux`.
-- Dùng hai ngưỡng bật/tắt (*hysteresis*) để tránh thiết bị đóng/ngắt liên tục.
-- ESP32 kiểm tra cấu hình rồi lưu vào bộ nhớ không mất điện (ví dụ Preferences/NVS), công bố trạng thái sau khi áp dụng; khi khởi động lại tiếp tục dùng cấu hình đã lưu.
+### 3.6. ESP32 gửi Config ACK
+
+Topic `greenhouse/01/config/ack`, QoS 1, `retain=false`:
+
+```json
+{
+  "deviceId": "greenhouse-01",
+  "configId": "cfg-...",
+  "result": "APPLIED",
+  "reason": null
+}
+```
+
+`result` is `APPLIED` or `REJECTED`. Current rejection reasons are `INVALID_MODE`, `INVALID_NUMBERS`, `INVALID_THRESHOLDS`, and `NVS_WRITE_FAILED`. Invalid JSON or a missing/invalid `configId` is ignored because it cannot be correlated. For validation, persistence, duplicate delivery, and Backend lifecycle semantics, see [A8 Config ACK](config-ack-a8.md).
+
+`deviceId` is required and must match the device associated with `configId`; the Backend ignores missing or mismatched device identity.
 
 ## 4. Quy tắc vận hành và an toàn
 

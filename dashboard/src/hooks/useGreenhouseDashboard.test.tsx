@@ -13,6 +13,7 @@ import { useGreenhouseDashboard } from './useGreenhouseDashboard'
 const apiMocks = vi.hoisted(() => ({
   getAlerts: vi.fn(),
   getCommands: vi.fn(),
+  getConfigStatus: vi.fn(),
   getDeviceConfig: vi.fn(),
   getDeviceState: vi.fn(),
   getLatestTelemetry: vi.fn(),
@@ -76,6 +77,13 @@ beforeEach(() => {
   apiMocks.getDeviceConfig.mockResolvedValue(fixtureDeviceConfig)
   apiMocks.getCommands.mockResolvedValue({ data: fixtureCommandHistory })
   apiMocks.getAlerts.mockResolvedValue({ data: fixtureAlerts })
+  apiMocks.getConfigStatus.mockResolvedValue({
+    configId: 'cfg-ui-001',
+    deviceId: 'greenhouse-01',
+    status: 'PENDING',
+    reason: null,
+    wasLate: false,
+  })
   apiMocks.getTelemetryHistory.mockImplementation(
     ({ bucket }: { bucket: keyof typeof fixtureTelemetryHistoryByBucket }) =>
       Promise.resolve(fixtureTelemetryHistoryByBucket[bucket]),
@@ -248,6 +256,169 @@ describe('useGreenhouseDashboard', () => {
     ).toMatchObject({ status: 'APPLIED' }))
     expect(apiMocks.getCommands.mock.calls.length).toBeGreaterThan(1)
 
+    unmount()
+  })
+
+  it('tạo Config ACK PENDING, rồi áp dụng trạng thái cuối từ WebSocket', async () => {
+    apiMocks.postDeviceConfig.mockResolvedValue({
+      configId: 'cfg-ui-001',
+      status: 'PENDING',
+      config: fixtureDeviceConfig,
+    })
+    const { result, unmount } = renderHook(() =>
+      useGreenhouseDashboard({ deviceId: 'greenhouse-01', enabled: true }),
+    )
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    await act(async () => {
+      await result.current.publishConfig(fixtureDeviceConfig)
+    })
+    expect(result.current.configAck).toMatchObject({
+      configId: 'cfg-ui-001',
+      status: 'PENDING',
+    })
+
+    const socket = FakeWebSocket.instances[0]
+    act(() => socket.message({
+      type: 'config_result',
+      data: {
+        configId: 'cfg-ui-001',
+        result: 'REJECTED',
+        reason: 'NVS_WRITE_FAILED',
+        wasLate: false,
+      },
+    }))
+    expect(result.current.configAck).toMatchObject({
+      configId: 'cfg-ui-001',
+      status: 'REJECTED',
+      reason: 'NVS_WRITE_FAILED',
+    })
+
+    act(() => socket.message({
+      type: 'config_result',
+      data: {
+        configId: 'cfg-ui-001',
+        result: 'TIMEOUT',
+        reason: null,
+        wasLate: false,
+      },
+    }))
+    expect(result.current.configAck?.status).toBe('TIMEOUT')
+
+    act(() => socket.message({
+      type: 'config_result',
+      data: {
+        configId: 'cfg-ui-001',
+        result: 'APPLIED',
+        reason: null,
+        wasLate: true,
+      },
+    }))
+    expect(result.current.configAck).toMatchObject({ status: 'APPLIED', wasLate: true })
+    unmount()
+  })
+
+  it('giữ config_result đến trước REST 202', async () => {
+    let resolveConfig: ((value: {
+      configId: string
+      status: 'PENDING'
+      config: typeof fixtureDeviceConfig
+    }) => void) | undefined
+    apiMocks.postDeviceConfig.mockImplementation(() => new Promise((resolve) => {
+      resolveConfig = resolve
+    }))
+    const { result, unmount } = renderHook(() =>
+      useGreenhouseDashboard({ deviceId: 'greenhouse-01', enabled: true }),
+    )
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    let request: Promise<unknown> | undefined
+    act(() => { request = result.current.publishConfig(fixtureDeviceConfig) })
+    act(() => FakeWebSocket.instances[0].message({
+      type: 'config_result',
+      data: {
+        configId: 'cfg-fast',
+        result: 'APPLIED',
+        reason: null,
+        wasLate: false,
+      },
+    }))
+    await act(async () => {
+      resolveConfig?.({ configId: 'cfg-fast', status: 'PENDING', config: fixtureDeviceConfig })
+      await request
+    })
+
+    expect(result.current.configAck).toMatchObject({ configId: 'cfg-fast', status: 'APPLIED' })
+    unmount()
+  })
+
+  it('không để REST snapshot cũ PENDING ghi đè ACK WebSocket terminal', async () => {
+    apiMocks.postDeviceConfig.mockResolvedValue({
+      configId: 'cfg-rest-race',
+      status: 'PENDING',
+      config: fixtureDeviceConfig,
+    })
+    let resolveStatus: ((value: {
+      configId: string
+      deviceId: string
+      status: 'PENDING'
+      reason: null
+      wasLate: false
+    }) => void) | undefined
+    apiMocks.getConfigStatus.mockImplementation(() => new Promise((resolve) => {
+      resolveStatus = resolve
+    }))
+    const { result, unmount } = renderHook(() =>
+      useGreenhouseDashboard({ deviceId: 'greenhouse-01', enabled: true }),
+    )
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    await act(async () => { await result.current.publishConfig(fixtureDeviceConfig) })
+    await waitFor(() => expect(apiMocks.getConfigStatus).toHaveBeenCalledWith('cfg-rest-race'))
+
+    act(() => FakeWebSocket.instances[0].message({
+      type: 'config_result',
+      data: { configId: 'cfg-rest-race', result: 'APPLIED', reason: null, wasLate: false },
+    }))
+    await act(async () => {
+      resolveStatus?.({
+        configId: 'cfg-rest-race',
+        deviceId: 'greenhouse-01',
+        status: 'PENDING',
+        reason: null,
+        wasLate: false,
+      })
+    })
+    expect(result.current.configAck?.status).toBe('APPLIED')
+    unmount()
+  })
+
+  it('dùng REST fallback cho trạng thái terminal và bỏ qua kết quả Config cũ', async () => {
+    apiMocks.postDeviceConfig
+      .mockResolvedValueOnce({ configId: 'cfg-old', status: 'PENDING', config: fixtureDeviceConfig })
+      .mockResolvedValueOnce({ configId: 'cfg-new', status: 'PENDING', config: fixtureDeviceConfig })
+    apiMocks.getConfigStatus.mockImplementation(async (configId: string) => ({
+      configId,
+      deviceId: 'greenhouse-01',
+      status: 'APPLIED',
+      reason: null,
+      wasLate: false,
+    }))
+    const { result, unmount } = renderHook(() =>
+      useGreenhouseDashboard({ deviceId: 'greenhouse-01', enabled: true }),
+    )
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    await act(async () => { await result.current.publishConfig(fixtureDeviceConfig) })
+    await act(async () => { await result.current.publishConfig(fixtureDeviceConfig) })
+    await waitFor(() => expect(result.current.configAck).toMatchObject({
+      configId: 'cfg-new',
+      status: 'APPLIED',
+    }))
+    act(() => FakeWebSocket.instances[0].message({
+      type: 'config_result',
+      data: { configId: 'cfg-old', result: 'REJECTED', reason: 'OLD', wasLate: false },
+    }))
+    expect(result.current.configAck).toMatchObject({ configId: 'cfg-new', status: 'APPLIED' })
+    expect(apiMocks.getConfigStatus).toHaveBeenCalledWith('cfg-new')
     unmount()
   })
 })

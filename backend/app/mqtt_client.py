@@ -43,6 +43,7 @@ class MqttService:
         self._handler: Callable[[str, str, dict], Any] | None = None
         self._stateHandler: Callable[[str, dict], Any] | None = None
         self._statusHandler: Callable[[str, dict], Any] | None = None
+        self._configAckHandler: Callable[[str, dict], Any] | None = None
 
     # --- lifecycle ---
 
@@ -54,10 +55,12 @@ class MqttService:
         onTelemetry: Callable[[str, dict], Any],
         onState: Callable[[str, dict], Any],
         onStatus: Callable[[str, dict], Any],
+        onConfigAck: Callable[[str, dict], Any],
     ) -> None:
         self._handler = onTelemetry
         self._stateHandler = onState
         self._statusHandler = onStatus
+        self._configAckHandler = onConfigAck
 
     def start(self) -> None:
         if not self._mqtt.enabled:
@@ -121,6 +124,10 @@ class MqttService:
     def topicConfig(self) -> str:
         return f"{self._prefix}/config"
 
+    @property
+    def topicConfigAck(self) -> str:
+        return f"{self._prefix}/config/ack"
+
     # --- publish ---
 
     def publishCommand(self, commandId: str, device: str, on: bool) -> bool:
@@ -145,7 +152,7 @@ class MqttService:
     def _onConnect(self, _client, _userdata, _flags, reasonCode, _properties=None) -> None:  # noqa: ANN001
         if reasonCode == 0:
             self._connected.set()
-            for topic in (self.topicTelemetry, self.topicState, self.topicStatus):
+            for topic in (self.topicTelemetry, self.topicState, self.topicStatus, self.topicConfigAck):
                 self._client.subscribe(topic, qos=1)
             logger.info("MQTT connected, subscribed: %s", self.topicTelemetry)
         else:
@@ -181,6 +188,8 @@ class MqttService:
             return self._stateHandler
         if topic == self.topicStatus:
             return self._statusHandler
+        if topic == self.topicConfigAck:
+            return self._configAckHandler
         return None
 
     def _dispatch(self, handler: Callable[[str, dict], Any], topic: str, deviceId: str, payload: dict) -> None:

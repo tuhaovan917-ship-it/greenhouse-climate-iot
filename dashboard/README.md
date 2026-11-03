@@ -2,10 +2,10 @@
 
 ## 1. Trạng thái tài liệu
 
-- Phiên bản tài liệu: `0.2.5-implementation`.
+- Tài liệu hiện tại: A8.9 supplement cho API contract và Config ACK.
 - Người phụ trách: Người 3 - Database & Dashboard.
 - Frontend đã thống nhất ở mức kiến trúc: **React + Vite + TypeScript**.
-- Tài liệu và TypeScript types đã đồng bộ với `docs/api-contract.md` v0.2.5 trên nhánh `feat/backend` và `docs/mqtt-protocol.md` ở nhánh `feat/esp32`.
+- TypeScript types và luồng Config ACK đồng bộ với [API contract](../docs/api-contract.md) và [A8 Config ACK](../docs/config-ack-a8.md).
 - Tám quyết định tích hợp ở mục 5 và ba chi tiết kỹ thuật ở mục 6 đã được Người 2 và Người 3 thống nhất.
 
 ### Trạng thái triển khai
@@ -26,11 +26,11 @@ Các milestone Overview, biểu đồ lịch sử và control flow đã có:
 - Khu vực điều khiển từ xa chỉ mở khi trạng thái thực tế là `MANUAL` và thiết bị online.
 - Luồng lệnh theo `commandId`: `PENDING → APPLIED|REJECTED|TIMEOUT`, hiển thị lý do và phản hồi trễ.
 - Không optimistic update actuator, không tự gửi lại sau timeout và chống xử lý thừa message QoS 1 trùng kết quả.
-- Khóa bơm khi `waterOk=false|null`; `POST /config` chỉ hiển thị `PUBLISHED` và tiếp tục chờ mode thực tế từ ESP32.
+- Khóa bơm khi `waterOk=false|null`; config hiển thị `PENDING/APPLIED/REJECTED/TIMEOUT`, late result, và khóa publish tiếp theo khi còn `PENDING`.
 - Form cấu hình đủ sáu ngưỡng hysteresis, validate cùng quy tắc Backend trước khi publish.
 - Khu vực cảnh báo tách rõ cảnh báo đang hoạt động và lịch sử đã xử lý, hiển thị severity, code và thời gian.
 - Empty state khi hệ thống an toàn; cấu trúc sẵn sàng khôi phục lịch sử từ `GET /api/alerts` sau reload/reconnect.
-- REST client đã tích hợp telemetry/state/history/config/commands/alerts theo contract Backend v0.2.5.
+- REST client tích hợp telemetry/state/history/config ACK/commands/alerts theo contract hiện tại; xem [A8 Config ACK](../docs/config-ack-a8.md).
 - Dashboard chạy live-only qua REST/WebSocket; không còn chế độ dữ liệu mô phỏng trong runtime.
 - Hệ thống mới chưa có telemetry vẫn vào trạng thái ready: sensor hiển thị chưa có dữ liệu, không đổi thành 0 và bơm tiếp tục bị khóa an toàn.
 - Dữ liệu quá 10 giây được đánh dấu chậm cập nhật nhưng Dashboard không tự suy ra offline; `online` vẫn do Backend quyết định.
@@ -83,13 +83,13 @@ Ngoài phạm vi v0.1:
 | Trạng thái thực tế | `GET /api/state?deviceId=` |
 | Gửi lệnh MANUAL | `POST /api/commands` |
 | Lịch sử lệnh | `GET /api/commands?deviceId=&limit=` |
-| Đọc/cập nhật cấu hình | `GET /api/config`, `POST /api/config` |
+| Đọc/cập nhật cấu hình | `GET /api/config`, `POST /api/config`, `GET /api/config/status?configId=` |
 | Cảnh báo | `GET /api/alerts?deviceId=&active=&code=&from=&to=&limit=` |
 
 ### WebSocket
 
 - Kết nối: `WS /ws?deviceId=greenhouse-01`.
-- Các message dự kiến: `telemetry`, `state`, `command_result`, `alert`, `ping`.
+- Các message dự kiến: `telemetry`, `state`, `command_result`, `config_result`, `alert`, `ping`.
 - Backend gửi `{"type":"ping"}` mỗi 20 giây; Dashboard không gửi heartbeat và bỏ qua type không nhận diện.
 - Khi WebSocket mất kết nối, Dashboard polling `telemetry/latest` và `state` mỗi 5 giây.
 - Khi WebSocket kết nối lại, Dashboard tải lại latest state và các cảnh báo đang active trước khi tiếp tục nhận realtime.
@@ -103,7 +103,7 @@ Ngoài phạm vi v0.1:
 4. `DeviceState` có `online` và `lastSeenAt`; Backend xác định offline bằng LWT hoặc 15 giây không nhận message hợp lệ.
 5. `waterOk` có kiểu `boolean | null`: `false` sinh `NO_WATER`; `null` sinh `SENSOR_FAULT` và khóa bơm failsafe.
 6. Contract cung cấp type cho `CommandLog`, `Alert` và WebSocket envelope. Command có thêm trạng thái Backend-side `TIMEOUT` sau 5 giây.
-7. `POST /api/config` trả `202 { status: "PUBLISHED", config: desired }`; đây không phải xác nhận ESP32 đã áp dụng.
+7. `POST /api/config` trả `202 { configId, status: "PENDING", config }`; REST status và WebSocket `config_result` cập nhật kết quả ESP32.
 8. Mốc v0.1 dùng X-API-Key tùy chọn trong legacy mode. Bản A6 localhost strict sử dụng session cookie, CSRF và RBAC; không dùng JWT.
 
 ## 6. Chi tiết đã được Backend làm rõ ở v0.2.1

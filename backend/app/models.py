@@ -166,9 +166,9 @@ class Alert(SQLModel, table=True):
 class DeviceConfig(SQLModel, table=True):
     """Latest desired configuration received from the Dashboard.
 
-    Storing a row does not prove the ESP32 applied it: the firmware has no
-    `configId` acknowledgement yet, so `POST /api/config` only returns
-    PUBLISHED (contract section 3.7).
+    `published_at` records the latest successful Backend publish. Device
+    acknowledgement lifecycle is tracked separately in memory by
+    `configAckService` and is not persisted with this model.
     """
 
     __tablename__ = "device_configs"

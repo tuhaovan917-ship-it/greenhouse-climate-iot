@@ -12,6 +12,7 @@ describe('A5.2 Viewer UI restrictions', () => {
       <ControlPanel
         readOnly
         config={fixtureDeviceConfig}
+        configAck={null}
         commands={[]}
         deviceState={fixtureDeviceState}
         telemetry={fixtureTelemetry}
